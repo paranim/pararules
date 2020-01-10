@@ -1,20 +1,10 @@
 import unittest
 import pararules
-import macros
 
-test "can iterate over fields":
-  type
-    TestObj = object
-      x: int
-      y: int
-      name: string
-
-  static:
-    for sym in getType(TestObj)[2]:
-      echo sym.symbol
-
-  let o = TestObj(x: 0, y: 1, name: "")
-
-  iterateFields(o)
-  
-  echo getFields[TestObj]()
+test "can create session":
+  var session = Session[string]()
+  var node = AlphaNode[string]()
+  node.testField = Field.Attribute
+  node.testValue = "color"
+  session.rootNode.children.add(node)
+  echo session
