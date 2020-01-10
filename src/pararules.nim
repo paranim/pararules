@@ -32,3 +32,22 @@ macro iterateFields*(t: typed): untyped =
       # fields, which would give a child of type nnkRecCase.
       # How to handle them depends on the use case.
 
+iterator objfields(t: NimNode): NimNode =
+  let reclist = t.getType[2]
+  for child in reclist.children:
+    yield child
+
+macro fields[T](x: T, fields: seq[tuple[name: string, `type`: string]]): typed =
+  result = newStmtList()
+  for n in x.getType[2]:
+    let i = $ n
+    let s = quote do:
+      `fields`.add((`i`, $ type(x.`n`)))
+    result.add(s)
+
+proc getFields*[T](): seq[tuple[name: string, `type`: string]] =
+  var x: T
+  var f: seq[tuple[name: string, `type`: string]] = @[]
+  fields(x, f)
+  f
+

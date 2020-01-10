@@ -1,5 +1,6 @@
 import unittest
 import pararules
+import macros
 
 test "can iterate over fields":
   type
@@ -8,8 +9,12 @@ test "can iterate over fields":
       y: int
       name: string
 
-  let t = (x: 0, y: 1, name: "")
+  static:
+    for sym in getType(TestObj)[2]:
+      echo sym.symbol
+
   let o = TestObj(x: 0, y: 1, name: "")
 
-  iterateFields(t)
   iterateFields(o)
+  
+  echo getFields[TestObj]()
