@@ -50,5 +50,6 @@ test "can create session":
   session.addNode(c6)
   session.addNode(c7)
   session.addNode(c8)
+  session.addFact((newVar("b1"), newStr("on"), newVar("b2")))
   echo session
 
