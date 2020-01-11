@@ -10,6 +10,13 @@ type
     of Str: strVal: string
     of Int: intVal: int
 
+proc `==`(x, y: Data): bool =
+  x.kind == y.kind and
+    (case x.kind:
+     of Var: x.varVal == y.varVal
+     of Str: x.strVal == y.strVal
+     of Int: x.intVal == y.intVal)
+
 proc newVar(val: string): Data =
   Data(kind: Var, varval: val)
 
@@ -21,10 +28,10 @@ proc newInt(val: int): Data =
 
 test "can create session":
   var session = Session[Data]()
-  var on = AlphaNode[Data](testField: Field.Attribute, testValue: newStr("on"))
-  var table = AlphaNode[Data](testField: Field.Value, testValue: newStr("table"))
-  var wme = (id: newInt(1), attr: newStr("on"), value: newStr("table"))
-  table.outputMemory.add(wme)
-  on.children.add(table)
-  session.rootNode.children.add(on)
+  let c1 = AlphaNode[Data](testField: Field.Attribute, testValue: newStr("on"))
+  let c8 = AlphaNode[Data](testField: Field.Attribute, testValue: newStr("on"),
+             children: @[AlphaNode[Data](testField: Field.Value, testValue: newStr("table"))])
+  session.addNode(c1)
+  session.addNode(c8)
   echo session
+
