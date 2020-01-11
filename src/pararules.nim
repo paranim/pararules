@@ -1,3 +1,5 @@
+import strformat
+
 type
   Field* {.pure.} = enum
     None, Identifier, Attribute, Value
@@ -24,3 +26,13 @@ proc addNode*(node: var AlphaNode, newNode: AlphaNode) =
 proc addNode*(session: var Session, newNode: AlphaNode) =
   session.rootNode.addNode(newNode)
 
+proc print(node: AlphaNode, indent: int): string =
+  if indent >= 0:
+    for i in 0..indent-1:
+      result &= "  "
+    result &= "{node.testField} = {node.testValue}\n".fmt
+  for child in node.children:
+    result &= print(child, indent+1)
+
+proc `$`*(session: Session): string =
+  print(session.rootNode, -1)

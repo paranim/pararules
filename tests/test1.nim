@@ -29,9 +29,26 @@ proc newInt(val: int): Data =
 test "can create session":
   var session = Session[Data]()
   let c1 = AlphaNode[Data](testField: Field.Attribute, testValue: newStr("on"))
+  let c2 = AlphaNode[Data](testField: Field.Attribute, testValue: newStr("left-of"))
+  let c3 = AlphaNode[Data](testField: Field.Attribute, testValue: newStr("color"),
+             children: @[AlphaNode[Data](testField: Field.Value, testValue: newStr("red"))])
+  let c4 = AlphaNode[Data](testField: Field.Attribute, testValue: newStr("color"),
+             children: @[AlphaNode[Data](testField: Field.Value, testValue: newStr("maize"))])
+  let c5 = AlphaNode[Data](testField: Field.Attribute, testValue: newStr("color"),
+             children: @[AlphaNode[Data](testField: Field.Value, testValue: newStr("blue"))])
+  let c6 = AlphaNode[Data](testField: Field.Attribute, testValue: newStr("color"),
+             children: @[AlphaNode[Data](testField: Field.Value, testValue: newStr("green"))])
+  let c7 = AlphaNode[Data](testField: Field.Attribute, testValue: newStr("color"),
+             children: @[AlphaNode[Data](testField: Field.Value, testValue: newStr("white"))])
   let c8 = AlphaNode[Data](testField: Field.Attribute, testValue: newStr("on"),
              children: @[AlphaNode[Data](testField: Field.Value, testValue: newStr("table"))])
   session.addNode(c1)
+  session.addNode(c2)
+  session.addNode(c3)
+  session.addNode(c4)
+  session.addNode(c5)
+  session.addNode(c6)
+  session.addNode(c7)
   session.addNode(c8)
   echo session
 
