@@ -4,17 +4,17 @@ type
   # alpha network
   Field* {.pure.} = enum
     None, Identifier, Attribute, Value
-  Element*[T] = tuple[id: T, attr: T, value: T]
+  Fact*[T] = tuple[id: T, attr: T, value: T]
   AlphaNode*[T] = ref object
     testField*: Field
     testValue*: T
-    elements*: seq[Element[T]]
+    facts*: seq[Fact[T]]
     successors*: seq[BetaNode[T]]
     children*: seq[AlphaNode[T]]
   # beta network
   Token*[T] = ref object
     parent: Token[T]
-    element: Element[T]
+    fact: Fact[T]
   TestAtJoinNode = object
     fieldOfArg1: Field
     conditionNumberOfArg2: int
@@ -47,54 +47,54 @@ proc addNode(node: var AlphaNode, newNode: AlphaNode) =
 proc addNode*(session: var Session, newNode: AlphaNode) =
   session.rootNode.addNode(newNode)
 
-proc rightActivation(node: BetaNode, element: Element) =
-  echo element
+proc rightActivation(node: BetaNode, fact: Fact) =
+  echo fact
 
 proc leftActivation(node: BetaNode, token: Token) =
   echo token
 
-proc alphaMemoryRightActivation(node: var AlphaNode, element: Element) =
-  node.elements.add(element)
+proc alphaMemoryRightActivation(node: var AlphaNode, fact: Fact) =
+  node.facts.add(fact)
   for child in node.successors.mitems():
-    child.rightActivation(element)
+    child.rightActivation(fact)
 
-proc betaMemoryLeftActivation(node: BetaNode, token: Token, element: Element) =
+proc betaMemoryLeftActivation(node: BetaNode, token: Token, fact: Fact) =
   let newToken = new(Token)
   newToken.parent = token
-  newToken.element = element
+  newToken.fact = fact
   node.tokens.add(newToken)
   for child in node.children.mitems():
     child.leftActivation()
 
-proc addElement(node: var AlphaNode, element: Element) =
+proc addFact(node: var AlphaNode, fact: Fact) =
   let val = case node.testField:
             of Field.None: node.testValue
-            of Field.Identifier: element[0]
-            of Field.Attribute: element[1]
-            of Field.Value: element[2]
+            of Field.Identifier: fact[0]
+            of Field.Attribute: fact[1]
+            of Field.Value: fact[2]
   if val != node.testValue:
     return
   elif node.testField != Field.None:
-    node.alphaMemoryRightActivation(element)
+    node.alphaMemoryRightActivation(fact)
   for child in node.children.mitems():
-    child.addElement(element)
+    child.addFact(fact)
 
-proc addElement*(session: var Session, element: Element) =
-  session.rootNode.addElement(element)
+proc addFact*(session: var Session, fact: Fact) =
+  session.rootNode.addFact(fact)
 
-proc print(element: Element, indent: int): string =
+proc print(fact: Fact, indent: int): string =
   if indent >= 0:
     for i in 0..indent-1:
       result &= "  "
-  result &= "Element = {element} \n".fmt
+  result &= "Fact = {fact} \n".fmt
 
 proc print(node: AlphaNode, indent: int): string =
   if indent >= 0:
     for i in 0..indent-1:
       result &= "  "
     result &= "{node.testField} = {node.testValue}\n".fmt
-  for element in node.elements:
-    result &= print(element, indent+1)
+  for fact in node.facts:
+    result &= print(fact, indent+1)
   for child in node.children:
     result &= print(child, indent+1)
 
