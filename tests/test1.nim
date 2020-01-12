@@ -28,6 +28,7 @@ proc newInt(val: int): Data =
 
 test "can create session":
   var session = Session[Data]()
+  session.rootNode = new(AlphaNode[Data])
   let c1 = AlphaNode[Data](testField: Field.Attribute, testValue: newStr("on"))
   let c2 = AlphaNode[Data](testField: Field.Attribute, testValue: newStr("left-of"))
   let c3 = AlphaNode[Data](testField: Field.Attribute, testValue: newStr("color"),
