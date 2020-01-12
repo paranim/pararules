@@ -3,11 +3,11 @@ import strformat, sequtils
 type
   Field* {.pure.} = enum
     None, Identifier, Attribute, Value
-  Fact*[T] = tuple[id: T, attr: T, value: T]
+  Element*[T] = tuple[id: T, attr: T, value: T]
   AlphaNode*[T] = object
     testField*: Field
     testValue*: T
-    outputMemory*: seq[Fact[T]]
+    outputMemory*: seq[Element[T]]
     children*: seq[AlphaNode[T]]
   Session*[T] = object
     rootNode: AlphaNode[T]
@@ -23,10 +23,10 @@ proc addNode(node: var AlphaNode, newNode: AlphaNode) =
 proc addNode*(session: var Session, newNode: AlphaNode) =
   session.rootNode.addNode(newNode)
 
-proc activateMemory(node: var AlphaNode, element: Fact) =
+proc activateMemory(node: var AlphaNode, element: Element) =
   node.outputMemory.add(element)
 
-proc addFact(node: var AlphaNode, element: Fact) =
+proc addElement(node: var AlphaNode, element: Element) =
   let val = case node.testField:
             of Field.None: node.testValue
             of Field.Identifier: element[0]
@@ -37,16 +37,16 @@ proc addFact(node: var AlphaNode, element: Fact) =
   elif node.testField != Field.None:
     node.activateMemory(element)
   for child in node.children.mitems():
-    child.addFact(element)
+    child.addElement(element)
 
-proc addFact*(session: var Session, element: Fact) =
-  session.rootNode.addFact(element)
+proc addElement*(session: var Session, element: Element) =
+  session.rootNode.addElement(element)
 
-proc print(element: Fact, indent: int): string =
+proc print(element: Element, indent: int): string =
   if indent >= 0:
     for i in 0..indent-1:
       result &= "  "
-  result &= "Fact = {element} \n".fmt
+  result &= "Element = {element} \n".fmt
 
 proc print(node: AlphaNode, indent: int): string =
   if indent >= 0:
