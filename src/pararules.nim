@@ -9,29 +9,22 @@ type
     testField*: Field
     testValue*: T
     facts*: seq[Fact[T]]
-    successors*: seq[BetaNode[T]]
+    successors*: seq[JoinNode[T]]
     children*: seq[AlphaNode[T]]
   # beta network
-  Token*[T] = ref object
-    parent: Token[T]
-    fact: Fact[T]
   TestAtJoinNode = object
     fieldOfArg1: Field
     conditionNumberOfArg2: int
     fieldOfArg2: Field
-  BetaType* {.pure.} = enum
-    Memory, Join, Prod
-  BetaNode*[T] = ref object
+  BetaNode[T] = ref object of RootObj
     children: seq[BetaNode[T]]
     parent: BetaNode[T]
-    case kind*: BetaType
-    of Memory:
-      tokens: seq[Token[T]]
-    of Join:
-      alphaNode: AlphaNode[T]
-      tests: seq[TestAtJoinNode]
-    of Prod:
-      nil
+  MemoryNode[T] = ref object of BetaNode[T]
+    facts: seq[Fact[T]]
+  JoinNode[T] = ref object of BetaNode[T]
+    alphaNode: AlphaNode[T]
+    tests: seq[TestAtJoinNode]
+  ProdNode[T] = ref object of BetaNode[T]
   # session
   Session*[T] = object
     rootNode*: AlphaNode[T]
@@ -47,24 +40,13 @@ proc addNode(node: var AlphaNode, newNode: AlphaNode) =
 proc addNode*(session: var Session, newNode: AlphaNode) =
   session.rootNode.addNode(newNode)
 
-proc rightActivation(node: BetaNode, fact: Fact) =
+proc rightActivation(node: var JoinNode, fact: Fact) =
   echo fact
-
-proc leftActivation(node: BetaNode, token: Token) =
-  echo token
 
 proc alphaMemoryRightActivation(node: var AlphaNode, fact: Fact) =
   node.facts.add(fact)
   for child in node.successors.mitems():
     child.rightActivation(fact)
-
-proc betaMemoryLeftActivation(node: BetaNode, token: Token, fact: Fact) =
-  let newToken = new(Token)
-  newToken.parent = token
-  newToken.fact = fact
-  node.tokens.add(newToken)
-  for child in node.children.mitems():
-    child.leftActivation()
 
 proc addFact(node: var AlphaNode, fact: Fact) =
   let val = case node.testField:
