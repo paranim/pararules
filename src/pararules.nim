@@ -13,9 +13,8 @@ type
     children: seq[AlphaNode[T]]
   # beta network
   TestAtJoinNode = object
-    fieldOfArg1: Field
-    conditionNumberOfArg2: int
-    fieldOfArg2: Field
+    alphaField: Field
+    betaField: Field
   BetaNode[T] = ref object of RootObj
     children: seq[BetaNode[T]]
     parent: BetaNode[T]
@@ -28,8 +27,11 @@ type
   # session
   Var* = object
     name*: string
+  Production[T] = object
+    nodes: seq[AlphaNode[T]]
   Session[T] = object
-    rootNode: AlphaNode[T]
+    alphaNode: AlphaNode[T]
+    betaNode: BetaNode[T]
 
 proc addNode(node: var AlphaNode, newNode: AlphaNode) =
   for child in node.children.mitems():
@@ -40,9 +42,9 @@ proc addNode(node: var AlphaNode, newNode: AlphaNode) =
   node.children.add(newNode)
 
 proc addNode(session: var Session, newNode: AlphaNode) =
-  session.rootNode.addNode(newNode)
+  session.alphaNode.addNode(newNode)
 
-proc addCondition*[T](session: var Session[T], id: Var or T, attr: Var or T, value: Var or T) =
+proc addCondition*[T](production: var Production[T], id: Var or T, attr: Var or T, value: Var or T) =
   var node: AlphaNode[T] = nil
   for fieldType in [Field.Value, Field.Attribute, Field.Identifier]:
     var newNode: AlphaNode[T] = nil
@@ -63,6 +65,10 @@ proc addCondition*[T](session: var Session[T], id: Var or T, attr: Var or T, val
         newNode.children.add(node)
       node = newNode
   if node != nil:
+    production.nodes.add(node)
+
+proc addProduction*[T](session: var Session[T], production: Production[T]) =
+  for node in production.nodes:
     session.addNode(node)
 
 proc rightActivation(node: var JoinNode, fact: Fact) =
@@ -87,10 +93,13 @@ proc addFact(node: var AlphaNode, fact: Fact) =
     child.addFact(fact)
 
 proc addFact*(session: var Session, fact: Fact) =
-  session.rootNode.addFact(fact)
+  session.alphaNode.addFact(fact)
 
 proc newSession*[T](): Session[T] =
-  result.rootNode = new(AlphaNode[T])
+  result.alphaNode = new(AlphaNode[T])
+
+proc newProduction*[T](): Production[T] =
+  result
 
 proc print(fact: Fact, indent: int): string =
   if indent >= 0:
@@ -109,4 +118,4 @@ proc print(node: AlphaNode, indent: int): string =
     result &= print(child, indent+1)
 
 proc `$`*(session: Session): string =
-  print(session.rootNode, -1)
+  print(session.alphaNode, -1)

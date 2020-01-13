@@ -21,18 +21,20 @@ proc newStr(val: string): Data =
 proc newInt(val: int): Data =
   Data(kind: Int, intVal: val)
 
-test "can create session":
+test "figure 2.4":
+  var prod = newProduction[Data]()
+  prod.addCondition(Var(name: "x"), newStr("on"), Var(name: "y"))
+  prod.addCondition(Var(name: "y"), newStr("left-of"), Var(name: "z"))
+  prod.addCondition(Var(name: "z"), newStr("color"), newStr("red"))
+  prod.addCondition(Var(name: "a"), newStr("color"), newStr("maize"))
+  prod.addCondition(Var(name: "b"), newStr("color"), newStr("blue"))
+  prod.addCondition(Var(name: "c"), newStr("color"), newStr("green"))
+  prod.addCondition(Var(name: "d"), newStr("color"), newStr("white"))
+  prod.addCondition(Var(name: "s"), newStr("on"), newStr("table"))
+  prod.addCondition(Var(name: "y"), Var(name: "a"), Var(name: "b"))
+  prod.addCondition(Var(name: "a"), newStr("left-of"), Var(name: "d"))
   var session = newSession[Data]()
-  session.addCondition(Var(name: "x"), newStr("on"), Var(name: "y"))
-  session.addCondition(Var(name: "y"), newStr("left-of"), Var(name: "z"))
-  session.addCondition(Var(name: "z"), newStr("color"), newStr("red"))
-  session.addCondition(Var(name: "a"), newStr("color"), newStr("maize"))
-  session.addCondition(Var(name: "b"), newStr("color"), newStr("blue"))
-  session.addCondition(Var(name: "c"), newStr("color"), newStr("green"))
-  session.addCondition(Var(name: "d"), newStr("color"), newStr("white"))
-  session.addCondition(Var(name: "s"), newStr("on"), newStr("table"))
-  session.addCondition(Var(name: "y"), Var(name: "a"), Var(name: "b"))
-  session.addCondition(Var(name: "a"), newStr("left-of"), Var(name: "d"))
+  session.addProduction(prod)
   session.addFact((newInt(1), newStr("on"), newInt(2)))
   session.addFact((newInt(1), newStr("color"), newStr("red")))
   echo session
