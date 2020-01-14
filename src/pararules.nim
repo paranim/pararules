@@ -30,8 +30,12 @@ type
   # session
   Var* = object
     name*: string
+    field: Field
+  Condition[T] = object
+    nodes: seq[AlphaNode[T]]
+    vars: seq[Var]
   Production[T] = object
-    conditions: seq[seq[AlphaNode[T]]]
+    conditions: seq[Condition[T]]
   Session[T] = object
     alphaNode: AlphaNode[T]
     betaNode: MemoryNode[T]
@@ -49,31 +53,43 @@ proc addNodes(session: var Session, nodes: seq[AlphaNode]): AlphaNode =
     result = result.addNode(node)
 
 proc addCondition*[T](production: var Production[T], id: Var or T, attr: Var or T, value: Var or T) =
-  var condition: seq[AlphaNode[T]]
+  var condition = Condition[T]()
   for fieldType in [Field.Identifier, Field.Attribute, Field.Value]:
     case fieldType:
       of Field.None:
         continue
       of Field.Identifier:
         when id is T:
-          condition.add AlphaNode[T](testField: fieldType, testValue: id)
+          condition.nodes.add AlphaNode[T](testField: fieldType, testValue: id)
+        else:
+          var temp = id
+          temp.field = fieldType
+          condition.vars.add temp
       of Field.Attribute:
         when attr is T:
-          condition.add AlphaNode[T](testField: fieldType, testValue: attr)
+          condition.nodes.add AlphaNode[T](testField: fieldType, testValue: attr)
+        else:
+          var temp = attr
+          temp.field = fieldType
+          condition.vars.add temp
       of Field.Value:
         when value is T:
-          condition.add AlphaNode[T](testField: fieldType, testValue: value)
-  if condition.len > 0:
-    production.conditions.add(condition)
+          condition.nodes.add AlphaNode[T](testField: fieldType, testValue: value)
+        else:
+          var temp = value
+          temp.field = fieldType
+          condition.vars.add temp
+  production.conditions.add(condition)
 
 proc addProduction*[T](session: var Session[T], production: Production[T]) =
   for condition in production.conditions:
-    var leafNode = session.addNodes(condition)
-    var betaNode = session.betaNode
-    if not leafNode.successors.hasKey(betaNode.addr):
-      var joinNode = JoinNode[T](parent: betaNode, alphaNode: leafNode)
-      leafNode.successors[betaNode.addr] = joinNode
-      betaNode.children.add(joinNode)
+    if condition.nodes.len > 0:
+      var leafNode = session.addNodes(condition.nodes)
+      var betaNode = session.betaNode
+      if not leafNode.successors.hasKey(betaNode.addr):
+        var joinNode = JoinNode[T](parent: betaNode, alphaNode: leafNode)
+        leafNode.successors[betaNode.addr] = joinNode
+        betaNode.children.add(joinNode)
 
 proc rightActivation(node: var JoinNode, fact: Fact) =
   echo fact
