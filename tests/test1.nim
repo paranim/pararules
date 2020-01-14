@@ -21,6 +21,10 @@ proc newStr(val: string): Data =
 proc newInt(val: int): Data =
   Data(kind: Int, intVal: val)
 
+test "figure 2.2":
+  var session = newSession[Data]()
+  echo session
+
 test "figure 2.4":
   var prod = newProduction[Data]()
   prod.addCondition(Var(name: "x"), newStr("on"), Var(name: "y"))

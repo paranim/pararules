@@ -1,4 +1,4 @@
-import strformat
+import strformat, tables
 
 type
   # alpha network
@@ -9,17 +9,20 @@ type
     testField: Field
     testValue: T
     facts: seq[Fact[T]]
-    successors: seq[JoinNode[T]]
+    successors: Table[ptr MemoryNode[T], JoinNode[T]]
     children: seq[AlphaNode[T]]
   # beta network
   TestAtJoinNode = object
     alphaField: Field
     betaField: Field
+  Token[T] = object
+    alphaNode: AlphaNode[T]
+    fact: Fact[T]
   BetaNode[T] = ref object of RootObj
     children: seq[BetaNode[T]]
     parent: BetaNode[T]
   MemoryNode[T] = ref object of BetaNode[T]
-    facts: seq[Fact[T]]
+    tokens: seq[Token[T]]
   JoinNode[T] = ref object of BetaNode[T]
     alphaNode: AlphaNode[T]
     tests: seq[TestAtJoinNode]
@@ -31,7 +34,7 @@ type
     nodes: seq[AlphaNode[T]]
   Session[T] = object
     alphaNode: AlphaNode[T]
-    betaNode: BetaNode[T]
+    betaNode: MemoryNode[T]
 
 proc addNode(node: var AlphaNode, newNode: AlphaNode) =
   for child in node.children.mitems():
@@ -67,8 +70,19 @@ proc addCondition*[T](production: var Production[T], id: Var or T, attr: Var or 
   if node != nil:
     production.nodes.add(node)
 
+proc getLeafNode(node: AlphaNode): AlphaNode =
+  if node.children.len > 0:
+    return node.children[0].getLeafNode()
+  node
+
 proc addProduction*[T](session: var Session[T], production: Production[T]) =
   for node in production.nodes:
+    var leafNode = node.getLeafNode()
+    var betaNode = session.betaNode
+    if not leafNode.successors.hasKey(betaNode.addr):
+      var joinNode = JoinNode[T](parent: betaNode, alphaNode: leafNode)
+      leafNode.successors[betaNode.addr] = joinNode
+      betaNode.children.add(joinNode)
     session.addNode(node)
 
 proc rightActivation(node: var JoinNode, fact: Fact) =
@@ -76,7 +90,7 @@ proc rightActivation(node: var JoinNode, fact: Fact) =
 
 proc alphaMemoryRightActivation(node: var AlphaNode, fact: Fact) =
   node.facts.add(fact)
-  for child in node.successors.mitems():
+  for child in node.successors.mvalues():
     child.rightActivation(fact)
 
 proc addFact(node: var AlphaNode, fact: Fact) =
@@ -97,6 +111,7 @@ proc addFact*(session: var Session, fact: Fact) =
 
 proc newSession*[T](): Session[T] =
   result.alphaNode = new(AlphaNode[T])
+  result.betaNode = new(MemoryNode[T])
 
 proc newProduction*[T](): Production[T] =
   result
