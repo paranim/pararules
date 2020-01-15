@@ -9,7 +9,7 @@ type
     testField: Field
     testValue: T
     facts: seq[Fact[T]]
-    successors: Table[ptr MemoryNode[T], JoinNode[T]]
+    successors: seq[JoinNode[T]]
     children: seq[AlphaNode[T]]
   # beta network
   TestAtJoinNode = object
@@ -21,6 +21,7 @@ type
   BetaNode[T] = ref object of RootObj
     children: seq[BetaNode[T]]
     parent: BetaNode[T]
+    varName: string
   MemoryNode[T] = ref object of BetaNode[T]
     tokens: seq[Token[T]]
   JoinNode[T] = ref object of BetaNode[T]
@@ -64,41 +65,46 @@ proc addCondition*[T](production: var Production[T], id: Var or T, attr: Var or 
         else:
           var temp = id
           temp.field = fieldType
-          condition.vars.add temp
+          condition.vars.add(temp)
       of Field.Attribute:
         when attr is T:
           condition.nodes.add AlphaNode[T](testField: fieldType, testValue: attr)
         else:
           var temp = attr
           temp.field = fieldType
-          condition.vars.add temp
+          condition.vars.add(temp)
       of Field.Value:
         when value is T:
           condition.nodes.add AlphaNode[T](testField: fieldType, testValue: value)
         else:
           var temp = value
           temp.field = fieldType
-          condition.vars.add temp
+          condition.vars.add(temp)
   production.conditions.add(condition)
 
 proc addProduction*[T](session: var Session[T], production: Production[T]) =
+  var joins: Table[string, MemoryNode[T]]
   for condition in production.conditions:
-    if condition.nodes.len > 0:
-      var leafNode = session.addNodes(condition.nodes)
-      var betaNode = session.betaNode
-      if not leafNode.successors.hasKey(betaNode.addr):
-        var joinNode = JoinNode[T](parent: betaNode, alphaNode: leafNode)
-        leafNode.successors[betaNode.addr] = joinNode
+    var leafNode = session.addNodes(condition.nodes)
+    for v in condition.vars:
+      let s = v.name
+      if not joins.hasKey(s):
+        joins[s] = session.betaNode
+      else:
+        var betaNode = joins[s]
+        var joinNode = JoinNode[T](parent: betaNode, alphaNode: leafNode, varName: s)
+        leafNode.successors.add(joinNode)
         betaNode.children.add(joinNode)
         var newBetaNode = MemoryNode[T](parent: joinNode)
         joinNode.children.add(newBetaNode)
+        joins[s] = newBetaNode
 
 proc rightActivation(node: var JoinNode, fact: Fact) =
   echo fact
 
 proc alphaMemoryRightActivation(node: var AlphaNode, fact: Fact) =
   node.facts.add(fact)
-  for child in node.successors.mvalues():
+  for child in node.successors.mitems():
     child.rightActivation(fact)
 
 proc addFact(node: var AlphaNode, fact: Fact) =
@@ -109,8 +115,7 @@ proc addFact(node: var AlphaNode, fact: Fact) =
             of Field.Value: fact[2]
   if val != node.testValue:
     return
-  elif node.testField != Field.None:
-    node.alphaMemoryRightActivation(fact)
+  node.alphaMemoryRightActivation(fact)
   for child in node.children.mitems():
     child.addFact(fact)
 
@@ -148,7 +153,7 @@ proc print[T](node: BetaNode[T], indent: int): string =
   if node of MemoryNode[T]:
     result &= "MemoryNode\n"
   elif node of JoinNode[T]:
-    result &= "JoinNode\n"
+    result &= "JoinNode {node.varName}\n".fmt
   elif node of ProdNode[T]:
     result &= "ProdNode\n"
   for child in node.children:
