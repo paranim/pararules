@@ -90,6 +90,8 @@ proc addProduction*[T](session: var Session[T], production: Production[T]) =
         var joinNode = JoinNode[T](parent: betaNode, alphaNode: leafNode)
         leafNode.successors[betaNode.addr] = joinNode
         betaNode.children.add(joinNode)
+        var newBetaNode = MemoryNode[T](parent: joinNode)
+        joinNode.children.add(newBetaNode)
 
 proc rightActivation(node: var JoinNode, fact: Fact) =
   echo fact
@@ -129,7 +131,9 @@ proc print(fact: Fact, indent: int): string =
   result &= "Fact = {fact} \n".fmt
 
 proc print(node: AlphaNode, indent: int): string =
-  if indent >= 0:
+  if indent == 0:
+    result &= "AlphaNode\n"
+  else:
     for i in 0 ..< indent:
       result &= "  "
     result &= "{node.testField} = {node.testValue}\n".fmt
@@ -138,5 +142,17 @@ proc print(node: AlphaNode, indent: int): string =
   for child in node.children:
     result &= print(child, indent+1)
 
+proc print[T](node: BetaNode[T], indent: int): string =
+  for i in 0 ..< indent:
+    result &= "  "
+  if node of MemoryNode[T]:
+    result &= "MemoryNode\n"
+  elif node of JoinNode[T]:
+    result &= "JoinNode\n"
+  elif node of ProdNode[T]:
+    result &= "ProdNode\n"
+  for child in node.children:
+    result &= print(child, indent+1)
+
 proc `$`*(session: Session): string =
-  print(session.alphaNode, -1)
+  print(session.alphaNode, 0) & print(session.betaNode, 0)
