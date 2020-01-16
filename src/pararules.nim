@@ -12,11 +12,12 @@ type
     successors: seq[JoinNode[T]]
     children: seq[AlphaNode[T]]
   # beta network
-  TestAtJoinNode = object
+  TestAtJoinNode[T] = object
     alphaField: Field
     betaField: Field
+    originNode: AlphaNode[T]
   Token[T] = object
-    alphaNode: AlphaNode[T]
+    originNode: AlphaNode[T]
     fact: Fact[T]
   BetaNode[T] = ref object of RootObj
     children: seq[BetaNode[T]]
@@ -25,7 +26,7 @@ type
     tokens: seq[Token[T]]
   JoinNode[T] = ref object of BetaNode[T]
     alphaNode: AlphaNode[T]
-    tests: seq[TestAtJoinNode]
+    tests: seq[TestAtJoinNode[T]]
   ProdNode[T] = ref object of BetaNode[T]
   # session
   Var* = object
@@ -82,10 +83,16 @@ proc addCondition*[T](production: var Production[T], id: Var or T, attr: Var or 
   production.conditions.add(condition)
 
 proc addProduction*[T](session: var Session[T], production: Production[T]) =
+  var joins: Table[string, (Var, AlphaNode[T])]
   var memNode = session.betaNode
   for condition in production.conditions:
     var leafNode = session.addNodes(condition.nodes)
     var joinNode = JoinNode[T](parent: memNode, alphaNode: leafNode)
+    for v in condition.vars:
+      if joins.hasKey(v.name):
+        let (joinVar, joinAlphaNode) = joins[v.name]
+        joinNode.tests.add(TestAtJoinNode[T](alphaField: v.field, betaField: joinVar.field, originNode: joinAlphaNode))
+      joins[v.name] = (v, leafNode)
     memNode.children.add(joinNode)
     leafNode.successors.add(joinNode)
     var newMemNode = MemoryNode[T](parent: joinNode)
