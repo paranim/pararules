@@ -19,15 +19,16 @@ type
   Token[T] = object
     originNode: AlphaNode[T]
     fact: Fact[T]
-  BetaNode[T] = ref object of RootObj
-    children: seq[BetaNode[T]]
-    parent: BetaNode[T]
-  MemoryNode[T] = ref object of BetaNode[T]
+  MemoryNode[T] = ref object
+    parent: JoinNode[T]
+    children: seq[JoinNode[T]]
     tokens: seq[Token[T]]
-  JoinNode[T] = ref object of BetaNode[T]
+    prod: bool
+  JoinNode[T] = ref object
+    parent: MemoryNode[T]
+    children: seq[MemoryNode[T]]
     alphaNode: AlphaNode[T]
     tests: seq[TestAtJoinNode[T]]
-  ProdNode[T] = ref object of BetaNode[T]
   # session
   Var* = object
     name*: string
@@ -85,7 +86,9 @@ proc addCondition*[T](production: var Production[T], id: Var or T, attr: Var or 
 proc addProduction*[T](session: var Session[T], production: Production[T]) =
   var joins: Table[string, (Var, AlphaNode[T])]
   var memNode = session.betaNode
-  for condition in production.conditions:
+  let last = production.conditions.len - 1
+  for i in 0 .. last:
+    var condition = production.conditions[i]
     var leafNode = session.addNodes(condition.nodes)
     var joinNode = JoinNode[T](parent: memNode, alphaNode: leafNode)
     for v in condition.vars:
@@ -95,7 +98,7 @@ proc addProduction*[T](session: var Session[T], production: Production[T]) =
       joins[v.name] = (v, leafNode)
     memNode.children.add(joinNode)
     leafNode.successors.add(joinNode)
-    var newMemNode = MemoryNode[T](parent: joinNode)
+    var newMemNode = MemoryNode[T](parent: joinNode, prod: i == last)
     joinNode.children.add(newMemNode)
     memNode = newMemNode
 
@@ -130,21 +133,31 @@ proc newSession*[T](): Session[T] =
 proc newProduction*[T](): Production[T] =
   result
 
+proc print(fact: Fact, indent: int): string
+proc print[T](node: JoinNode[T], indent: int): string
+proc print[T](node: MemoryNode[T], indent: int): string
+proc print(node: AlphaNode, indent: int): string
+
 proc print(fact: Fact, indent: int): string =
   if indent >= 0:
     for i in 0 ..< indent:
       result &= "  "
   result &= "Fact = {fact} \n".fmt
 
-proc print[T](node: BetaNode[T], indent: int): string =
+proc print[T](node: JoinNode[T], indent: int): string =
   for i in 0 ..< indent:
     result &= "  "
-  if node of MemoryNode[T]:
-    result &= "MemoryNode\n"
-  elif node of JoinNode[T]:
-    result &= "JoinNode\n"
-  elif node of ProdNode[T]:
+  result &= "JoinNode\n"
+  for child in node.children:
+    result &= print(child, indent+1)
+
+proc print[T](node: MemoryNode[T], indent: int): string =
+  for i in 0 ..< indent:
+    result &= "  "
+  if node.prod:
     result &= "ProdNode\n"
+  else:
+    result &= "MemoryNode\n"
   for child in node.children:
     result &= print(child, indent+1)
 
