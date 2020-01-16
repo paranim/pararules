@@ -89,7 +89,12 @@ proc addProduction*[T](session: var Session[T], production: Production[T]) =
     for v in condition.vars:
       let s = v.name
       if not joins.hasKey(s):
-        joins[s] = session.betaNode
+        var joinNode = JoinNode[T](parent: session.betaNode, alphaNode: leafNode, varName: s)
+        leafNode.successors.add(joinNode)
+        session.betaNode.children.add(joinNode)
+        var newBetaNode = MemoryNode[T](parent: joinNode)
+        joinNode.children.add(newBetaNode)
+        joins[s] = newBetaNode
       else:
         var betaNode = joins[s]
         var joinNode = JoinNode[T](parent: betaNode, alphaNode: leafNode, varName: s)
@@ -98,6 +103,10 @@ proc addProduction*[T](session: var Session[T], production: Production[T]) =
         var newBetaNode = MemoryNode[T](parent: joinNode)
         joinNode.children.add(newBetaNode)
         joins[s] = newBetaNode
+  var pNode = ProdNode[T]()
+  for betaNode in joins.mvalues():
+    if not (pNode in betaNode.children):
+      betaNode.children.add(pNode)
 
 proc rightActivation(node: var JoinNode, fact: Fact) =
   echo fact
@@ -109,13 +118,14 @@ proc alphaMemoryRightActivation(node: var AlphaNode, fact: Fact) =
 
 proc addFact(node: var AlphaNode, fact: Fact) =
   let val = case node.testField:
-            of Field.None: node.testValue
-            of Field.Identifier: fact[0]
-            of Field.Attribute: fact[1]
-            of Field.Value: fact[2]
+    of Field.None: node.testValue
+    of Field.Identifier: fact[0]
+    of Field.Attribute: fact[1]
+    of Field.Value: fact[2]
   if val != node.testValue:
     return
-  node.alphaMemoryRightActivation(fact)
+  elif node.testField != Field.None:
+    node.alphaMemoryRightActivation(fact)
   for child in node.children.mitems():
     child.addFact(fact)
 
@@ -135,18 +145,6 @@ proc print(fact: Fact, indent: int): string =
       result &= "  "
   result &= "Fact = {fact} \n".fmt
 
-proc print(node: AlphaNode, indent: int): string =
-  if indent == 0:
-    result &= "AlphaNode\n"
-  else:
-    for i in 0 ..< indent:
-      result &= "  "
-    result &= "{node.testField} = {node.testValue}\n".fmt
-  for fact in node.facts:
-    result &= print(fact, indent+1)
-  for child in node.children:
-    result &= print(child, indent+1)
-
 proc print[T](node: BetaNode[T], indent: int): string =
   for i in 0 ..< indent:
     result &= "  "
@@ -156,6 +154,21 @@ proc print[T](node: BetaNode[T], indent: int): string =
     result &= "JoinNode {node.varName}\n".fmt
   elif node of ProdNode[T]:
     result &= "ProdNode\n"
+  for child in node.children:
+    result &= print(child, indent+1)
+
+proc print(node: AlphaNode, indent: int): string =
+  if indent == 0:
+    result &= "AlphaNode\n"
+  else:
+    for i in 0 ..< indent:
+      result &= "  "
+    result &= "{node.testField} = {node.testValue}\n".fmt
+    if node.successors.len > 0:
+      for s in node.successors:
+        result &= print(s, indent+1)
+  for fact in node.facts:
+    result &= print(fact, indent+1)
   for child in node.children:
     result &= print(child, indent+1)
 
