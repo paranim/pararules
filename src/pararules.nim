@@ -3,7 +3,7 @@ import strformat, tables
 type
   # alpha network
   Field = enum
-    None, Identifier, Attribute, Value
+    Identifier, Attribute, Value
   Fact[T] = tuple[id: T, attr: T, value: T]
   AlphaNode[T] = ref object
     testField: Field
@@ -16,14 +16,13 @@ type
     alphaField: Field
     betaField: Field
     originNode: AlphaNode[T]
-  Token[T] = object
-    originNode: AlphaNode[T]
-    fact: Fact[T]
+  NodeType = enum
+    Root, Partial, Full
   MemoryNode[T] = ref object
     parent: JoinNode[T]
     children: seq[JoinNode[T]]
-    tokens: seq[Token[T]]
-    prod: bool
+    facts: Table[ptr AlphaNode[T], seq[Fact[T]]]
+    nodeType: NodeType
   JoinNode[T] = ref object
     parent: MemoryNode[T]
     children: seq[MemoryNode[T]]
@@ -58,8 +57,6 @@ proc addCondition*[T](production: var Production[T], id: Var or T, attr: Var or 
   var condition = Condition[T]()
   for fieldType in [Field.Identifier, Field.Attribute, Field.Value]:
     case fieldType:
-      of Field.None:
-        continue
       of Field.Identifier:
         when id is T:
           condition.nodes.add AlphaNode[T](testField: fieldType, testValue: id)
@@ -98,33 +95,65 @@ proc addProduction*[T](session: var Session[T], production: Production[T]) =
       joins[v.name] = (v, leafNode)
     memNode.children.add(joinNode)
     leafNode.successors.add(joinNode)
-    var newMemNode = MemoryNode[T](parent: joinNode, prod: i == last)
+    var newMemNode = MemoryNode[T](parent: joinNode, nodeType: if i == last: Full else: Partial)
     joinNode.children.add(newMemNode)
     memNode = newMemNode
 
-proc rightActivation(node: var JoinNode, fact: Fact) =
+proc performJoinTest(test: TestAtJoinNode, alphaFact: Fact, betaFact: Fact): bool =
+  let arg1 = case test.alphaField:
+    of Field.Identifier: alphaFact[0]
+    of Field.Attribute: alphaFact[1]
+    of Field.Value: alphaFact[2]
+  let arg2 = case test.betaField:
+    of Field.Identifier: betaFact[0]
+    of Field.Attribute: betaFact[1]
+    of Field.Value: betaFact[2]
+  if arg1 != arg2:
+    return false
+  true
+
+proc leftActivation(node: var JoinNode, originNode: AlphaNode, fact: Fact) =
   echo fact
 
-proc alphaMemoryRightActivation(node: var AlphaNode, fact: Fact) =
+proc leftActivation(node: var MemoryNode, originNode: AlphaNode, fact: Fact) =
+  if not node.facts.hasKey(originNode.unsafeAddr):
+    node.facts[originNode.unsafeAddr] = @[fact]
+  else:
+    node.facts[originNode.unsafeAddr].add(fact)
+  for child in node.children.mitems():
+    child.leftActivation(originNode, fact)
+
+proc rightActivation(node: var JoinNode, fact: Fact) =
+  if node.parent.nodeType == Root:
+    for child in node.children.mitems():
+      child.leftActivation(node.alphaNode, fact)
+  else:
+    for test in node.tests:
+      if node.parent.facts.hasKey(test.originNode.unsafeAddr):
+        if not performJoinTest(test, fact, node.parent.facts[test.originNode.unsafeAddr][0]):
+          continue
+        for child in node.children.mitems():
+          child.leftActivation(test.originNode, fact)
+
+proc rightActivation(node: var AlphaNode, fact: Fact) =
   node.facts.add(fact)
   for child in node.successors.mitems():
     child.rightActivation(fact)
 
-proc addFact(node: var AlphaNode, fact: Fact) =
+proc addFact(node: var AlphaNode, fact: Fact, root: bool) =
   let val = case node.testField:
-    of Field.None: node.testValue
     of Field.Identifier: fact[0]
     of Field.Attribute: fact[1]
     of Field.Value: fact[2]
-  if val != node.testValue:
-    return
-  elif node.testField != Field.None:
-    node.alphaMemoryRightActivation(fact)
+  if not root:
+    if val != node.testValue:
+      return
+    node.rightActivation(fact)
   for child in node.children.mitems():
-    child.addFact(fact)
+    child.addFact(fact, false)
 
 proc addFact*(session: var Session, fact: Fact) =
-  session.alphaNode.addFact(fact)
+  session.alphaNode.addFact(fact, true)
 
 proc newSession*[T](): Session[T] =
   result.alphaNode = new(AlphaNode[T])
@@ -154,10 +183,11 @@ proc print[T](node: JoinNode[T], indent: int): string =
 proc print[T](node: MemoryNode[T], indent: int): string =
   for i in 0 ..< indent:
     result &= "  "
-  if node.prod:
+  if node.nodeType == Full:
     result &= "ProdNode\n"
   else:
-    result &= "MemoryNode\n"
+    let cnt = node.facts.len
+    result &= "MemoryNode {cnt}\n".fmt
   for child in node.children:
     result &= print(child, indent+1)
 
