@@ -21,21 +21,21 @@ proc newStr(val: string): Data =
 proc newInt(val: int): Data =
   Data(kind: Int, intVal: val)
 
-test "figure 2.2":
+test "figure 2.4 (simplified)":
   var prod = newProduction[Data]()
   prod.addCondition(Var(name: "b"), newStr("color"), newStr("blue"))
   prod.addCondition(Var(name: "y"), newStr("left-of"), Var(name: "z"))
   prod.addCondition(Var(name: "a"), newStr("color"), newStr("maize"))
   prod.addCondition(Var(name: "y"), Var(name: "a"), Var(name: "b"))
   var session = newSession[Data]()
-  session.addProduction(prod)
+  let prodNode = session.addProduction(prod)
   session.addFact((newStr("Bob"), newStr("color"), newStr("blue")))
   session.addFact((newStr("Yair"), newStr("left-of"), newStr("Zach")))
   session.addFact((newStr("Alice"), newStr("color"), newStr("maize")))
   session.addFact((newStr("Yair"), newStr("Alice"), newStr("Bob")))
-  echo session
+  check prodNode.facts.len == 1
+  check prodNode.facts[0].len == 4
 
-#[
 test "figure 2.4":
   var prod = newProduction[Data]()
   prod.addCondition(Var(name: "x"), newStr("on"), Var(name: "y"))
@@ -49,8 +49,17 @@ test "figure 2.4":
   prod.addCondition(Var(name: "y"), Var(name: "a"), Var(name: "b"))
   prod.addCondition(Var(name: "a"), newStr("left-of"), Var(name: "d"))
   var session = newSession[Data]()
-  session.addProduction(prod)
-  session.addFact((newInt(1), newStr("on"), newInt(2)))
-  session.addFact((newInt(1), newStr("color"), newStr("red")))
-  ]#
+  let prodNode = session.addProduction(prod)
+  session.addFact((newStr("Xavier"), newStr("on"), newStr("Yair")))
+  session.addFact((newStr("Yair"), newStr("left-of"), newStr("Zach")))
+  session.addFact((newStr("Zach"), newStr("color"), newStr("red")))
+  session.addFact((newStr("Alex"), newStr("color"), newStr("maize")))
+  session.addFact((newStr("Bob"), newStr("color"), newStr("blue")))
+  session.addFact((newStr("Charlie"), newStr("color"), newStr("green")))
+  session.addFact((newStr("Daniel"), newStr("color"), newStr("white")))
+  session.addFact((newStr("Seth"), newStr("on"), newStr("table")))
+  session.addFact((newStr("Yair"), newStr("Alex"), newStr("Bob")))
+  session.addFact((newStr("Alex"), newStr("left-of"), newStr("Daniel")))
+  check prodNode.facts.len == 1
+  check prodNode.facts[0].len == 10
 

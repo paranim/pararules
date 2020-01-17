@@ -21,7 +21,7 @@ type
   MemoryNode[T] = ref object
     parent: JoinNode[T]
     children: seq[JoinNode[T]]
-    facts: seq[seq[Fact[T]]]
+    facts*: seq[seq[Fact[T]]]
     nodeType: NodeType
   JoinNode[T] = ref object
     parent: MemoryNode[T]
@@ -80,24 +80,24 @@ proc addCondition*[T](production: var Production[T], id: Var or T, attr: Var or 
           condition.vars.add(temp)
   production.conditions.add(condition)
 
-proc addProduction*[T](session: var Session[T], production: Production[T]) =
+proc addProduction*[T](session: var Session[T], production: Production[T]): MemoryNode[T] =
   var joins: Table[string, (Var, int)]
-  var memNode = session.betaNode
+  result = session.betaNode
   let last = production.conditions.len - 1
   for i in 0 .. last:
     var condition = production.conditions[i]
     var leafNode = session.addNodes(condition.nodes)
-    var joinNode = JoinNode[T](parent: memNode, alphaNode: leafNode)
+    var joinNode = JoinNode[T](parent: result, alphaNode: leafNode)
     for v in condition.vars:
       if joins.hasKey(v.name):
         let (joinVar, condNum) = joins[v.name]
         joinNode.tests.add(TestAtJoinNode[T](alphaField: v.field, betaField: joinVar.field, condition: condNum))
       joins[v.name] = (v, i)
-    memNode.children.add(joinNode)
+    result.children.add(joinNode)
     leafNode.successors.add(joinNode)
     var newMemNode = MemoryNode[T](parent: joinNode, nodeType: if i == last: Full else: Partial)
     joinNode.children.add(newMemNode)
-    memNode = newMemNode
+    result = newMemNode
 
 proc performJoinTest(test: TestAtJoinNode, alphaFact: Fact, betaFact: Fact): bool =
   let arg1 = case test.alphaField:
@@ -196,11 +196,11 @@ proc print[T](node: JoinNode[T], indent: int): string =
 proc print[T](node: MemoryNode[T], indent: int): string =
   for i in 0 ..< indent:
     result &= "  "
-  let cnt = if node.facts.len > 0: node.facts[0].len else: -1
+  let cnt = node.facts.len
   if node.nodeType == Full:
-    result &= "ProdNode {cnt}\n".fmt
+    result &= "ProdNode ({cnt})\n".fmt
   else:
-    result &= "MemoryNode {cnt}\n".fmt
+    result &= "MemoryNode ({cnt})\n".fmt
   for child in node.children:
     result &= print(child, indent+1)
 
