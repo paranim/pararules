@@ -21,7 +21,7 @@ type
   MemoryNode[T] = ref object
     parent: JoinNode[T]
     children: seq[JoinNode[T]]
-    facts: Table[ptr AlphaNode[T], seq[Fact[T]]]
+    facts: seq[Table[ptr AlphaNode[T], Fact[T]]]
     nodeType: NodeType
   JoinNode[T] = ref object
     parent: MemoryNode[T]
@@ -108,32 +108,45 @@ proc performJoinTest(test: TestAtJoinNode, alphaFact: Fact, betaFact: Fact): boo
     of Field.Identifier: betaFact[0]
     of Field.Attribute: betaFact[1]
     of Field.Value: betaFact[2]
-  if arg1 != arg2:
-    return false
-  true
+  arg1 == arg2
 
-proc leftActivation(node: var JoinNode, originNode: AlphaNode, fact: Fact) =
-  echo fact
+proc leftActivation[T](node: var MemoryNode[T], factTable: Table[ptr AlphaNode[T], Fact[T]], originNode: AlphaNode[T], fact: Fact[T])
 
-proc leftActivation(node: var MemoryNode, originNode: AlphaNode, fact: Fact) =
-  if not node.facts.hasKey(originNode.unsafeAddr):
-    node.facts[originNode.unsafeAddr] = @[fact]
-  else:
-    node.facts[originNode.unsafeAddr].add(fact)
+proc leftActivation[T](node: var JoinNode[T], factTable: Table[ptr AlphaNode[T], Fact[T]], originNode: AlphaNode[T], fact: Fact[T]) =
+  for alphaFact in node.alphaNode.facts:
+    var passDown = true
+    for test in node.tests:
+      if not performJoinTest(test, alphaFact, fact):
+        passDown = false
+        break
+    if passDown:
+      for child in node.children.mitems():
+        child.leftActivation(factTable, node.alphaNode, alphaFact)
+
+proc leftActivation[T](node: var MemoryNode[T], factTable: Table[ptr AlphaNode[T], Fact[T]], originNode: AlphaNode[T], fact: Fact[T]) =
+  var newFactTable = factTable
+  newFactTable[originNode.unsafeAddr] = fact
+  node.facts.add(newFactTable)
   for child in node.children.mitems():
-    child.leftActivation(originNode, fact)
+    child.leftActivation(factTable, originNode, fact)
 
-proc rightActivation(node: var JoinNode, fact: Fact) =
+proc rightActivation[T](node: var JoinNode[T], fact: Fact[T]) =
   if node.parent.nodeType == Root:
     for child in node.children.mitems():
-      child.leftActivation(node.alphaNode, fact)
+      let factTable = initTable[ptr AlphaNode[T], Fact[T]]()
+      child.leftActivation(factTable, node.alphaNode, fact)
   else:
-    for test in node.tests:
-      if node.parent.facts.hasKey(test.originNode.unsafeAddr):
-        if not performJoinTest(test, fact, node.parent.facts[test.originNode.unsafeAddr][0]):
-          continue
+    for factTable in node.parent.facts.mitems():
+      var passDown = true
+      for test in node.tests:
+        if factTable.hasKey(test.originNode.unsafeAddr):
+          let betaFact = factTable[test.originNode.unsafeAddr]
+          if not performJoinTest(test, fact, betaFact):
+            passDown = false
+            break
+      if passDown:
         for child in node.children.mitems():
-          child.leftActivation(test.originNode, fact)
+          child.leftActivation(factTable, node.alphaNode, fact)
 
 proc rightActivation(node: var AlphaNode, fact: Fact) =
   node.facts.add(fact)
@@ -141,14 +154,14 @@ proc rightActivation(node: var AlphaNode, fact: Fact) =
     child.rightActivation(fact)
 
 proc addFact(node: var AlphaNode, fact: Fact, root: bool) =
-  let val = case node.testField:
-    of Field.Identifier: fact[0]
-    of Field.Attribute: fact[1]
-    of Field.Value: fact[2]
   if not root:
+    let val = case node.testField:
+      of Field.Identifier: fact[0]
+      of Field.Attribute: fact[1]
+      of Field.Value: fact[2]
     if val != node.testValue:
       return
-    node.rightActivation(fact)
+  node.rightActivation(fact)
   for child in node.children.mitems():
     child.addFact(fact, false)
 
@@ -183,10 +196,10 @@ proc print[T](node: JoinNode[T], indent: int): string =
 proc print[T](node: MemoryNode[T], indent: int): string =
   for i in 0 ..< indent:
     result &= "  "
+  let cnt = if node.facts.len > 0: node.facts[0].len else: -1
   if node.nodeType == Full:
-    result &= "ProdNode\n"
+    result &= "ProdNode {cnt}\n".fmt
   else:
-    let cnt = node.facts.len
     result &= "MemoryNode {cnt}\n".fmt
   for child in node.children:
     result &= print(child, indent+1)
