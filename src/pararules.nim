@@ -153,20 +153,22 @@ proc rightActivation(node: var AlphaNode, fact: Fact) =
   for child in node.successors.mitems():
     child.rightActivation(fact)
 
-proc addFact(node: var AlphaNode, fact: Fact, root: bool) =
+proc addFact(node: var AlphaNode, fact: Fact, root: bool): bool =
   if not root:
     let val = case node.testField:
       of Field.Identifier: fact[0]
       of Field.Attribute: fact[1]
       of Field.Value: fact[2]
     if val != node.testValue:
-      return
-  node.rightActivation(fact)
+      return false
   for child in node.children.mitems():
-    child.addFact(fact, false)
+    if child.addFact(fact, false):
+      return true
+  node.rightActivation(fact)
+  true
 
 proc addFact*(session: var Session, fact: Fact) =
-  session.alphaNode.addFact(fact, true)
+  discard session.alphaNode.addFact(fact, true)
 
 proc newSession*[T](): Session[T] =
   result.alphaNode = new(AlphaNode[T])
