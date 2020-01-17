@@ -81,7 +81,7 @@ proc addCondition*[T](production: var Production[T], id: Var or T, attr: Var or 
   production.conditions.add(condition)
 
 proc addProduction*[T](session: var Session[T], production: Production[T]) =
-  var joins: Table[string, seq[(Var, int)]]
+  var joins: Table[string, (Var, int)]
   var memNode = session.betaNode
   let last = production.conditions.len - 1
   for i in 0 .. last:
@@ -90,11 +90,9 @@ proc addProduction*[T](session: var Session[T], production: Production[T]) =
     var joinNode = JoinNode[T](parent: memNode, alphaNode: leafNode)
     for v in condition.vars:
       if joins.hasKey(v.name):
-        for (joinVar, condNum) in joins[v.name]:
-          joinNode.tests.add(TestAtJoinNode[T](alphaField: v.field, betaField: joinVar.field, condition: condNum))
-        joins[v.name].add((v, i))
-      else:
-        joins[v.name] = @[(v, i)]
+        let (joinVar, condNum) = joins[v.name]
+        joinNode.tests.add(TestAtJoinNode[T](alphaField: v.field, betaField: joinVar.field, condition: condNum))
+      joins[v.name] = (v, i)
     memNode.children.add(joinNode)
     leafNode.successors.add(joinNode)
     var newMemNode = MemoryNode[T](parent: joinNode, nodeType: if i == last: Full else: Partial)
