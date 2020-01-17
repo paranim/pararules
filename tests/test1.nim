@@ -56,10 +56,13 @@ test "figure 2.4":
   session.addFact((newStr("Alex"), newStr("color"), newStr("maize")))
   session.addFact((newStr("Bob"), newStr("color"), newStr("blue")))
   session.addFact((newStr("Charlie"), newStr("color"), newStr("green")))
-  session.addFact((newStr("Daniel"), newStr("color"), newStr("white")))
+ 
   session.addFact((newStr("Seth"), newStr("on"), newStr("table")))
   session.addFact((newStr("Yair"), newStr("Alex"), newStr("Bob")))
   session.addFact((newStr("Alex"), newStr("left-of"), newStr("Daniel")))
+
+  session.addFact((newStr("Daniel"), newStr("color"), newStr("white")))
+
   check prodNode.facts.len == 1
   check prodNode.facts[0].len == 10
 

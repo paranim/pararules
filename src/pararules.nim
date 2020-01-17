@@ -110,16 +110,18 @@ proc performJoinTest(test: TestAtJoinNode, alphaFact: Fact, betaFact: Fact): boo
     of Field.Value: betaFact[2]
   arg1 == arg2
 
+proc performJoinTests(tests: seq[TestAtJoinNode], facts: seq[Fact], alphaFact: Fact): bool =
+  for test in tests:
+    let betaFact = facts[test.condition]
+    if not performJoinTest(test, alphaFact, betaFact):
+      return false
+  true
+
 proc leftActivation[T](node: var MemoryNode[T], facts: seq[Fact[T]], fact: Fact[T])
 
-proc leftActivation[T](node: var JoinNode[T], facts: seq[Fact[T]], fact: Fact[T]) =
+proc leftActivation[T](node: var JoinNode[T], facts: seq[Fact[T]]) =
   for alphaFact in node.alphaNode.facts:
-    var passDown = true
-    for test in node.tests:
-      if not performJoinTest(test, alphaFact, fact):
-        passDown = false
-        break
-    if passDown:
+    if performJoinTests(node.tests, facts, alphaFact):
       for child in node.children.mitems():
         child.leftActivation(facts, alphaFact)
 
@@ -128,7 +130,7 @@ proc leftActivation[T](node: var MemoryNode[T], facts: seq[Fact[T]], fact: Fact[
   newFacts.add(fact)
   node.facts.add(newFacts)
   for child in node.children.mitems():
-    child.leftActivation(newFacts, fact)
+    child.leftActivation(newFacts)
 
 proc rightActivation[T](node: var JoinNode[T], fact: Fact[T]) =
   if node.parent.nodeType == Root:
@@ -136,13 +138,7 @@ proc rightActivation[T](node: var JoinNode[T], fact: Fact[T]) =
       child.leftActivation(@[], fact)
   else:
     for facts in node.parent.facts:
-      var passDown = true
-      for test in node.tests:
-        let betaFact = facts[test.condition]
-        if not performJoinTest(test, fact, betaFact):
-          passDown = false
-          break
-      if passDown:
+      if performJoinTests(node.tests, facts, fact):
         for child in node.children.mitems():
           child.leftActivation(facts, fact)
 
@@ -178,7 +174,7 @@ proc newProduction*[T](): Production[T] =
 proc print(fact: Fact, indent: int): string
 proc print[T](node: JoinNode[T], indent: int): string
 proc print[T](node: MemoryNode[T], indent: int): string
-proc print(node: var AlphaNode, indent: int): string
+proc print(node: AlphaNode, indent: int): string
 
 proc print(fact: Fact, indent: int): string =
   if indent >= 0:
@@ -204,7 +200,7 @@ proc print[T](node: MemoryNode[T], indent: int): string =
   for child in node.children:
     result &= print(child, indent+1)
 
-proc print(node: var AlphaNode, indent: int): string =
+proc print(node: AlphaNode, indent: int): string =
   let cnt = node.successors.len
   if indent == 0:
     result &= "AlphaNode ({cnt})\n".fmt
@@ -214,7 +210,7 @@ proc print(node: var AlphaNode, indent: int): string =
     result &= "{node.testField} = {node.testValue} ({cnt})\n".fmt
   for fact in node.facts:
     result &= print(fact, indent+1)
-  for child in node.children.mitems():
+  for child in node.children:
     result &= print(child, indent+1)
 
 proc `$`*(session: Session): string =
