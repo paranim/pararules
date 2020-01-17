@@ -15,13 +15,13 @@ type
   TestAtJoinNode[T] = object
     alphaField: Field
     betaField: Field
-    originNode: AlphaNode[T]
+    condition: int
   NodeType = enum
     Root, Partial, Full
   MemoryNode[T] = ref object
     parent: JoinNode[T]
     children: seq[JoinNode[T]]
-    facts: seq[Table[ptr AlphaNode[T], Fact[T]]]
+    facts: seq[seq[Fact[T]]]
     nodeType: NodeType
   JoinNode[T] = ref object
     parent: MemoryNode[T]
@@ -81,7 +81,7 @@ proc addCondition*[T](production: var Production[T], id: Var or T, attr: Var or 
   production.conditions.add(condition)
 
 proc addProduction*[T](session: var Session[T], production: Production[T]) =
-  var joins: Table[string, (Var, AlphaNode[T])]
+  var joins: Table[string, seq[(Var, int)]]
   var memNode = session.betaNode
   let last = production.conditions.len - 1
   for i in 0 .. last:
@@ -90,9 +90,11 @@ proc addProduction*[T](session: var Session[T], production: Production[T]) =
     var joinNode = JoinNode[T](parent: memNode, alphaNode: leafNode)
     for v in condition.vars:
       if joins.hasKey(v.name):
-        let (joinVar, joinAlphaNode) = joins[v.name]
-        joinNode.tests.add(TestAtJoinNode[T](alphaField: v.field, betaField: joinVar.field, originNode: joinAlphaNode))
-      joins[v.name] = (v, leafNode)
+        for (joinVar, condNum) in joins[v.name]:
+          joinNode.tests.add(TestAtJoinNode[T](alphaField: v.field, betaField: joinVar.field, condition: condNum))
+        joins[v.name].add((v, i))
+      else:
+        joins[v.name] = @[(v, i)]
     memNode.children.add(joinNode)
     leafNode.successors.add(joinNode)
     var newMemNode = MemoryNode[T](parent: joinNode, nodeType: if i == last: Full else: Partial)
@@ -110,9 +112,9 @@ proc performJoinTest(test: TestAtJoinNode, alphaFact: Fact, betaFact: Fact): boo
     of Field.Value: betaFact[2]
   arg1 == arg2
 
-proc leftActivation[T](node: var MemoryNode[T], factTable: Table[ptr AlphaNode[T], Fact[T]], originNode: AlphaNode[T], fact: Fact[T])
+proc leftActivation[T](node: var MemoryNode[T], facts: seq[Fact[T]], originNode: AlphaNode[T], fact: Fact[T])
 
-proc leftActivation[T](node: var JoinNode[T], factTable: Table[ptr AlphaNode[T], Fact[T]], originNode: AlphaNode[T], fact: Fact[T]) =
+proc leftActivation[T](node: var JoinNode[T], facts: seq[Fact[T]], originNode: AlphaNode[T], fact: Fact[T]) =
   for alphaFact in node.alphaNode.facts:
     var passDown = true
     for test in node.tests:
@@ -121,32 +123,30 @@ proc leftActivation[T](node: var JoinNode[T], factTable: Table[ptr AlphaNode[T],
         break
     if passDown:
       for child in node.children.mitems():
-        child.leftActivation(factTable, node.alphaNode, alphaFact)
+        child.leftActivation(facts, node.alphaNode, alphaFact)
 
-proc leftActivation[T](node: var MemoryNode[T], factTable: Table[ptr AlphaNode[T], Fact[T]], originNode: AlphaNode[T], fact: Fact[T]) =
-  var newFactTable = factTable
-  newFactTable[originNode.unsafeAddr] = fact
-  node.facts.add(newFactTable)
+proc leftActivation[T](node: var MemoryNode[T], facts: seq[Fact[T]], originNode: AlphaNode[T], fact: Fact[T]) =
+  var newFacts = facts
+  newFacts.add(fact)
+  node.facts.add(newFacts)
   for child in node.children.mitems():
-    child.leftActivation(factTable, originNode, fact)
+    child.leftActivation(newFacts, originNode, fact)
 
 proc rightActivation[T](node: var JoinNode[T], fact: Fact[T]) =
   if node.parent.nodeType == Root:
     for child in node.children.mitems():
-      let factTable = initTable[ptr AlphaNode[T], Fact[T]]()
-      child.leftActivation(factTable, node.alphaNode, fact)
+      child.leftActivation(@[], node.alphaNode, fact)
   else:
-    for factTable in node.parent.facts.mitems():
+    for facts in node.parent.facts:
       var passDown = true
       for test in node.tests:
-        if factTable.hasKey(test.originNode.unsafeAddr):
-          let betaFact = factTable[test.originNode.unsafeAddr]
-          if not performJoinTest(test, fact, betaFact):
-            passDown = false
-            break
+        let betaFact = facts[test.condition]
+        if not performJoinTest(test, fact, betaFact):
+          passDown = false
+          break
       if passDown:
         for child in node.children.mitems():
-          child.leftActivation(factTable, node.alphaNode, fact)
+          child.leftActivation(facts, node.alphaNode, fact)
 
 proc rightActivation(node: var AlphaNode, fact: Fact) =
   node.facts.add(fact)
@@ -180,7 +180,7 @@ proc newProduction*[T](): Production[T] =
 proc print(fact: Fact, indent: int): string
 proc print[T](node: JoinNode[T], indent: int): string
 proc print[T](node: MemoryNode[T], indent: int): string
-proc print(node: AlphaNode, indent: int): string
+proc print(node: var AlphaNode, indent: int): string
 
 proc print(fact: Fact, indent: int): string =
   if indent >= 0:
@@ -206,17 +206,19 @@ proc print[T](node: MemoryNode[T], indent: int): string =
   for child in node.children:
     result &= print(child, indent+1)
 
-proc print(node: AlphaNode, indent: int): string =
+proc print(node: var AlphaNode, indent: int): string =
+  let cnt = node.successors.len
   if indent == 0:
-    result &= "AlphaNode\n"
+    result &= "AlphaNode ({cnt})\n".fmt
   else:
     for i in 0 ..< indent:
       result &= "  "
-    result &= "{node.testField} = {node.testValue}\n".fmt
+    result &= "{node.testField} = {node.testValue} ({cnt})\n".fmt
   for fact in node.facts:
     result &= print(fact, indent+1)
-  for child in node.children:
+  for child in node.children.mitems():
     result &= print(child, indent+1)
 
 proc `$`*(session: Session): string =
-  print(session.alphaNode, 0) & print(session.betaNode, 0)
+  var alphaNode = session.alphaNode
+  print(alphaNode, 0) & print(session.betaNode, 0)
