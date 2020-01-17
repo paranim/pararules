@@ -110,9 +110,9 @@ proc performJoinTest(test: TestAtJoinNode, alphaFact: Fact, betaFact: Fact): boo
     of Field.Value: betaFact[2]
   arg1 == arg2
 
-proc leftActivation[T](node: var MemoryNode[T], facts: seq[Fact[T]], originNode: AlphaNode[T], fact: Fact[T])
+proc leftActivation[T](node: var MemoryNode[T], facts: seq[Fact[T]], fact: Fact[T])
 
-proc leftActivation[T](node: var JoinNode[T], facts: seq[Fact[T]], originNode: AlphaNode[T], fact: Fact[T]) =
+proc leftActivation[T](node: var JoinNode[T], facts: seq[Fact[T]], fact: Fact[T]) =
   for alphaFact in node.alphaNode.facts:
     var passDown = true
     for test in node.tests:
@@ -121,19 +121,19 @@ proc leftActivation[T](node: var JoinNode[T], facts: seq[Fact[T]], originNode: A
         break
     if passDown:
       for child in node.children.mitems():
-        child.leftActivation(facts, node.alphaNode, alphaFact)
+        child.leftActivation(facts, alphaFact)
 
-proc leftActivation[T](node: var MemoryNode[T], facts: seq[Fact[T]], originNode: AlphaNode[T], fact: Fact[T]) =
+proc leftActivation[T](node: var MemoryNode[T], facts: seq[Fact[T]], fact: Fact[T]) =
   var newFacts = facts
   newFacts.add(fact)
   node.facts.add(newFacts)
   for child in node.children.mitems():
-    child.leftActivation(newFacts, originNode, fact)
+    child.leftActivation(newFacts, fact)
 
 proc rightActivation[T](node: var JoinNode[T], fact: Fact[T]) =
   if node.parent.nodeType == Root:
     for child in node.children.mitems():
-      child.leftActivation(@[], node.alphaNode, fact)
+      child.leftActivation(@[], fact)
   else:
     for facts in node.parent.facts:
       var passDown = true
@@ -144,7 +144,7 @@ proc rightActivation[T](node: var JoinNode[T], fact: Fact[T]) =
           break
       if passDown:
         for child in node.children.mitems():
-          child.leftActivation(facts, node.alphaNode, fact)
+          child.leftActivation(facts, fact)
 
 proc rightActivation(node: var AlphaNode, fact: Fact) =
   node.facts.add(fact)
