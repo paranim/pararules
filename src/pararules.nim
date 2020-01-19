@@ -22,13 +22,18 @@ type
     parent: JoinNode[T]
     children: seq[JoinNode[T]]
     facts*: seq[seq[Fact[T]]]
-    nodeType: NodeType
+    case nodeType: NodeType
+    of Full:
+      production: Production[T]
+    else:
+      nil
   JoinNode[T] = ref object
     parent: MemoryNode[T]
     children: seq[MemoryNode[T]]
     alphaNode: AlphaNode[T]
     tests: seq[TestAtJoinNode[T]]
   # session
+  Vars[T] = Table[string, T]
   Var* = object
     name*: string
     field: Field
@@ -37,6 +42,7 @@ type
     vars: seq[Var]
   Production[T] = object
     conditions: seq[Condition[T]]
+    callback: proc (vars: Vars[T])
   Session[T] = object
     alphaNode: AlphaNode[T]
     betaNode: MemoryNode[T]
@@ -96,6 +102,8 @@ proc addProduction*[T](session: Session[T], production: Production[T]): MemoryNo
     result.children.add(joinNode)
     leafNode.successors.add(joinNode)
     var newMemNode = MemoryNode[T](parent: joinNode, nodeType: if i == last: Full else: Partial)
+    if newMemNode.nodeType == Full:
+      newMemNode.production = production
     joinNode.children.add(newMemNode)
     result = newMemNode
 
@@ -129,8 +137,31 @@ proc leftActivation[T](node: MemoryNode[T], facts: seq[Fact[T]], fact: Fact[T]) 
   var newFacts = facts
   newFacts.add(fact)
   node.facts.add(newFacts)
-  for child in node.children.mitems():
-    child.leftActivation(newFacts)
+  if node.nodeType == Full:
+    assert node.production.conditions.len == newFacts.len
+    var vars: Vars[T]
+    for i in 0 ..< node.production.conditions.len:
+      for v in node.production.conditions[i].vars:
+        case v.field:
+          of Identifier:
+            if vars.hasKey(v.name):
+              assert vars[v.name] == newFacts[i][0]
+            else:
+              vars[v.name] = newFacts[i][0]
+          of Attribute:
+            if vars.hasKey(v.name):
+              assert vars[v.name] == newFacts[i][1]
+            else:
+              vars[v.name] = newFacts[i][1]
+          of Value:
+            if vars.hasKey(v.name):
+              assert vars[v.name] == newFacts[i][2]
+            else:
+              vars[v.name] = newFacts[i][2]
+    node.production.callback(vars)
+  else:
+    for child in node.children.mitems():
+      child.leftActivation(newFacts)
 
 proc rightActivation[T](node: JoinNode[T], fact: Fact[T]) =
   if node.parent.nodeType == Root:
@@ -168,8 +199,8 @@ proc newSession*[T](): Session[T] =
   result.alphaNode = new(AlphaNode[T])
   result.betaNode = new(MemoryNode[T])
 
-proc newProduction*[T](): Production[T] =
-  result
+proc newProduction*[T](cb: proc (vars: Vars[T])): Production[T] =
+  result.callback = cb
 
 proc print(fact: Fact, indent: int): string
 proc print[T](node: JoinNode[T], indent: int): string

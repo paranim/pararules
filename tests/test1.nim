@@ -1,5 +1,6 @@
 import unittest
 import pararules
+import tables
 
 type
   DataType = enum
@@ -22,7 +23,8 @@ proc newInt(val: int): Data =
   Data(kind: Int, intVal: val)
 
 test "figure 2.4 (simplified)":
-  var prod = newProduction[Data]()
+  var vars: Table[string, Data]
+  var prod = newProduction[Data](proc (v: Table[string, Data]) = vars = v)
   prod.addCondition(Var(name: "b"), newStr("color"), newStr("blue"))
   prod.addCondition(Var(name: "y"), newStr("left-of"), Var(name: "z"))
   prod.addCondition(Var(name: "a"), newStr("color"), newStr("maize"))
@@ -35,9 +37,14 @@ test "figure 2.4 (simplified)":
   session.addFact((newStr("Yair"), newStr("Alice"), newStr("Bob")))
   check prodNode.facts.len == 1
   check prodNode.facts[0].len == 4
+  check vars["a"] == newStr("Alice")
+  check vars["b"] == newStr("Bob")
+  check vars["y"] == newStr("Yair")
+  check vars["z"] == newStr("Zach")
 
 test "figure 2.4":
-  var prod = newProduction[Data]()
+  var vars: Table[string, Data]
+  var prod = newProduction[Data](proc (v: Table[string, Data]) = vars = v)
   prod.addCondition(Var(name: "x"), newStr("on"), Var(name: "y"))
   prod.addCondition(Var(name: "y"), newStr("left-of"), Var(name: "z"))
   prod.addCondition(Var(name: "z"), newStr("color"), newStr("red"))
@@ -65,4 +72,8 @@ test "figure 2.4":
 
   check prodNode.facts.len == 1
   check prodNode.facts[0].len == 10
+  check vars["a"] == newStr("Alex")
+  check vars["b"] == newStr("Bob")
+  check vars["y"] == newStr("Yair")
+  check vars["z"] == newStr("Zach")
 
