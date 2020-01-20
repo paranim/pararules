@@ -175,8 +175,9 @@ proc rightActivation[T](node: JoinNode[T], fact: Fact[T]) =
 
 proc rightActivation(node: AlphaNode, fact: Fact) =
   node.facts.add(fact)
-  for child in node.successors:
-    child.rightActivation(fact)
+  let last = node.successors.len - 1
+  for i in 0 .. last:
+    node.successors[last - i].rightActivation(fact)
 
 proc addFact(node: AlphaNode, fact: Fact, root: bool): bool =
   if not root:

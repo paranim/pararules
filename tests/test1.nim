@@ -85,3 +85,18 @@ test "adding facts out of order":
   check vars["y"] == newStr("Yair")
   check vars["z"] == newStr("Zach")
 
+test "duplicate facts":
+  var vars: Table[string, Data]
+  var prod = newProduction[Data](proc (v: Table[string, Data]) = vars = v)
+  prod.addCondition(Var(name: "x"), newStr("self"), Var(name: "y"))
+  prod.addCondition(Var(name: "x"), newStr("color"), newStr("red"))
+  prod.addCondition(Var(name: "y"), newStr("color"), newStr("red"))
+
+  var session = newSession[Data]()
+  let prodNode = session.addProduction(prod)
+  session.addFact((newStr("b1"), newStr("self"), newStr("b1")))
+  session.addFact((newStr("b1"), newStr("color"), newStr("red")))
+
+  check prodNode.facts.len == 1
+  check prodNode.facts[0].len == 3
+
