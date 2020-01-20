@@ -1,4 +1,4 @@
-import strformat, tables
+import strformat, tables, algorithm
 
 type
   # alpha network
@@ -86,6 +86,15 @@ proc addCondition*[T](production: var Production[T], id: Var or T, attr: Var or 
           condition.vars.add(temp)
   production.conditions.add(condition)
 
+proc isAncestor(x, y: JoinNode): bool =
+  var node = y
+  while node != nil and node.parent != nil:
+    if node.parent.parent == x:
+      return true
+    else:
+      node = node.parent.parent
+  false
+
 proc addProduction*[T](session: Session[T], production: Production[T]): MemoryNode[T] =
   var joins: Table[string, (Var, int)]
   result = session.betaNode
@@ -101,6 +110,9 @@ proc addProduction*[T](session: Session[T], production: Production[T]): MemoryNo
       joins[v.name] = (v, i)
     result.children.add(joinNode)
     leafNode.successors.add(joinNode)
+    # successors must be sorted by ancestry (descendents first) to avoid duplicate rule firings
+    leafNode.successors.sort(proc (x, y: JoinNode[T]): int =
+      if isAncestor(x, y): 1 else: -1)
     var newMemNode = MemoryNode[T](parent: joinNode, nodeType: if i == last: Full else: Partial)
     if newMemNode.nodeType == Full:
       newMemNode.production = production
@@ -175,9 +187,8 @@ proc rightActivation[T](node: JoinNode[T], fact: Fact[T]) =
 
 proc rightActivation(node: AlphaNode, fact: Fact) =
   node.facts.add(fact)
-  let last = node.successors.len - 1
-  for i in 0 .. last:
-    node.successors[last - i].rightActivation(fact)
+  for child in node.successors:
+    child.rightActivation(fact)
 
 proc addFact(node: AlphaNode, fact: Fact, root: bool): bool =
   if not root:
