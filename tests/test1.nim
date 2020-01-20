@@ -22,27 +22,34 @@ proc newStr(val: string): Data =
 proc newInt(val: int): Data =
   Data(kind: Int, intVal: val)
 
-test "figure 2.4 (simplified)":
+test "number of conditions != number of facts":
   var vars: Table[string, Data]
   var prod = newProduction[Data](proc (v: Table[string, Data]) = vars = v)
   prod.addCondition(Var(name: "b"), newStr("color"), newStr("blue"))
   prod.addCondition(Var(name: "y"), newStr("left-of"), Var(name: "z"))
   prod.addCondition(Var(name: "a"), newStr("color"), newStr("maize"))
   prod.addCondition(Var(name: "y"), Var(name: "a"), Var(name: "b"))
+  prod.addCondition(Var(name: "x"), newStr("height"), Var(name: "h"))
+
   var session = newSession[Data]()
   let prodNode = session.addProduction(prod)
   session.addFact((newStr("Bob"), newStr("color"), newStr("blue")))
   session.addFact((newStr("Yair"), newStr("left-of"), newStr("Zach")))
   session.addFact((newStr("Alice"), newStr("color"), newStr("maize")))
   session.addFact((newStr("Yair"), newStr("Alice"), newStr("Bob")))
-  check prodNode.facts.len == 1
-  check prodNode.facts[0].len == 4
+
+  session.addFact((newStr("Xavier"), newStr("height"), newInt(72)))
+  session.addFact((newStr("Thomas"), newStr("height"), newInt(72)))
+  session.addFact((newStr("Gilbert"), newStr("height"), newInt(72)))
+
+  check prodNode.facts.len == 3
+  check prodNode.facts[0].len == 5
   check vars["a"] == newStr("Alice")
   check vars["b"] == newStr("Bob")
   check vars["y"] == newStr("Yair")
   check vars["z"] == newStr("Zach")
 
-test "figure 2.4":
+test "adding facts out of order":
   var vars: Table[string, Data]
   var prod = newProduction[Data](proc (v: Table[string, Data]) = vars = v)
   prod.addCondition(Var(name: "x"), newStr("on"), Var(name: "y"))
@@ -55,6 +62,7 @@ test "figure 2.4":
   prod.addCondition(Var(name: "s"), newStr("on"), newStr("table"))
   prod.addCondition(Var(name: "y"), Var(name: "a"), Var(name: "b"))
   prod.addCondition(Var(name: "a"), newStr("left-of"), Var(name: "d"))
+
   var session = newSession[Data]()
   let prodNode = session.addProduction(prod)
   session.addFact((newStr("Xavier"), newStr("on"), newStr("Yair")))
