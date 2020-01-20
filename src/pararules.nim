@@ -1,10 +1,11 @@
 import strformat, tables, algorithm
 
 type
-  # alpha network
+  # facts
   Field = enum
     Identifier, Attribute, Value
   Fact[T] = tuple[id: T, attr: T, value: T]
+  # alpha network
   AlphaNode[T] = ref object
     testField: Field
     testValue: T
@@ -12,7 +13,7 @@ type
     successors: seq[JoinNode[T]]
     children: seq[AlphaNode[T]]
   # beta network
-  TestAtJoinNode[T] = object
+  TestAtJoinNode = object
     alphaField: Field
     betaField: Field
     condition: int
@@ -31,7 +32,7 @@ type
     parent: MemoryNode[T]
     children: seq[MemoryNode[T]]
     alphaNode: AlphaNode[T]
-    tests: seq[TestAtJoinNode[T]]
+    tests: seq[TestAtJoinNode]
   # session
   Vars[T] = Table[string, T]
   Var* = object
@@ -106,7 +107,7 @@ proc addProduction*[T](session: Session[T], production: Production[T]): MemoryNo
     for v in condition.vars:
       if joins.hasKey(v.name):
         let (joinVar, condNum) = joins[v.name]
-        joinNode.tests.add(TestAtJoinNode[T](alphaField: v.field, betaField: joinVar.field, condition: condNum))
+        joinNode.tests.add(TestAtJoinNode(alphaField: v.field, betaField: joinVar.field, condition: condNum))
       joins[v.name] = (v, i)
     result.children.add(joinNode)
     leafNode.successors.add(joinNode)
