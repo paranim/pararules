@@ -130,7 +130,7 @@ proc leftActivation[T](node: MemoryNode[T], facts: seq[Fact[T]], fact: Fact[T])
 proc leftActivation[T](node: JoinNode[T], facts: seq[Fact[T]]) =
   for alphaFact in node.alphaNode.facts:
     if performJoinTests(node.tests, facts, alphaFact):
-      for child in node.children.mitems():
+      for child in node.children:
         child.leftActivation(facts, alphaFact)
 
 proc leftActivation[T](node: MemoryNode[T], facts: seq[Fact[T]], fact: Fact[T]) =
@@ -160,22 +160,22 @@ proc leftActivation[T](node: MemoryNode[T], facts: seq[Fact[T]], fact: Fact[T]) 
               vars[v.name] = newFacts[i][2]
     node.production.callback(vars)
   else:
-    for child in node.children.mitems():
+    for child in node.children:
       child.leftActivation(newFacts)
 
 proc rightActivation[T](node: JoinNode[T], fact: Fact[T]) =
   if node.parent.nodeType == Root:
-    for child in node.children.mitems():
+    for child in node.children:
       child.leftActivation(@[], fact)
   else:
     for facts in node.parent.facts:
       if performJoinTests(node.tests, facts, fact):
-        for child in node.children.mitems():
+        for child in node.children:
           child.leftActivation(facts, fact)
 
 proc rightActivation(node: AlphaNode, fact: Fact) =
   node.facts.add(fact)
-  for child in node.successors.mitems():
+  for child in node.successors:
     child.rightActivation(fact)
 
 proc addFact(node: AlphaNode, fact: Fact, root: bool): bool =
@@ -186,7 +186,7 @@ proc addFact(node: AlphaNode, fact: Fact, root: bool): bool =
       of Field.Value: fact[2]
     if val != node.testValue:
       return false
-  for child in node.children.mitems():
+  for child in node.children:
     if child.addFact(fact, false):
       return true
   node.rightActivation(fact)
