@@ -4,19 +4,14 @@ type
   # facts
   Field = enum
     Identifier, Attribute, Value
-  Fact[I, A, V] = tuple[id: I, attr: A, value: V]
+  Fact[T] = tuple[id: T, attr: T, value: T]
   # alpha network
-  AlphaNode[I, A, V] = ref object
-    case field: Field
-    of Identifier:
-      id: I
-    of Attribute:
-      attr: A
-    of Value:
-      value: V
-    facts: seq[Fact[I, A, V]]
-    successors: seq[JoinNode[I, A, V]]
-    children: seq[AlphaNode[I, A, V]]
+  AlphaNode[T] = ref object
+    testField: Field
+    testValue: T
+    facts: seq[Fact[T]]
+    successors: seq[JoinNode[T]]
+    children: seq[AlphaNode[T]]
   # beta network
   TestAtJoinNode = object
     alphaField: Field
@@ -24,46 +19,38 @@ type
     condition: int
   NodeType = enum
     Root, Partial, Full
-  MemoryNode[I, A, V] = ref object
-    parent: JoinNode[I, A, V]
-    children: seq[JoinNode[I, A, V]]
-    facts*: seq[seq[Fact[I, A, V]]]
+  MemoryNode[T] = ref object
+    parent: JoinNode[T]
+    children: seq[JoinNode[T]]
+    facts*: seq[seq[Fact[T]]]
     case nodeType: NodeType
     of Full:
-      production: Production[I, A, V]
+      production: Production[T]
     else:
       nil
-  JoinNode[I, A, V] = ref object
-    parent: MemoryNode[I, A, V]
-    children: seq[MemoryNode[I, A, V]]
-    alphaNode: AlphaNode[I, A, V]
+  JoinNode[T] = ref object
+    parent: MemoryNode[T]
+    children: seq[MemoryNode[T]]
+    alphaNode: AlphaNode[T]
     tests: seq[TestAtJoinNode]
   # session
   Vars[T] = Table[string, T]
   Var* = object
     name*: string
     field: Field
-  Condition[I, A, V] = object
-    nodes: seq[AlphaNode[I, A, V]]
+  Condition[T] = object
+    nodes: seq[AlphaNode[T]]
     vars: seq[Var]
-  Callback[I, A, V] = proc (ids: Vars[I], attrs: Vars[A], values: Vars[V])
-  Production[I, A, V] = object
-    conditions: seq[Condition[I, A, V]]
-    callback: Callback[I, A, V]
-  Session[I, A, V] = object
-    alphaNode: AlphaNode[I, A, V]
-    betaNode: MemoryNode[I, A, V]
-
-proc `==`(x, y: AlphaNode): bool =
-  x.field == y.field and
-    (case x.field:
-     of Identifier: x.id == y.id
-     of Attribute: x.attr == y.attr
-     of Value: x.value == y.value)
+  Production[T] = object
+    conditions: seq[Condition[T]]
+    callback: proc (vars: Vars[T])
+  Session[T] = object
+    alphaNode: AlphaNode[T]
+    betaNode: MemoryNode[T]
 
 proc addNode(node: AlphaNode, newNode: AlphaNode): AlphaNode =
   for child in node.children:
-    if child == newNode:
+    if child.testField == newNode.testField and child.testValue == newNode.testValue:
       return child
   node.children.add(newNode)
   return newNode
@@ -73,36 +60,27 @@ proc addNodes(session: Session, nodes: seq[AlphaNode]): AlphaNode =
   for node in nodes:
     result = result.addNode(node)
 
-proc newIdAlphaNode[I, A, V](id: I): AlphaNode[I, A, V] =
-  AlphaNode[I, A, V](field: Identifier, id: id)
-
-proc newAttrAlphaNode[I, A, V](attr: A): AlphaNode[I, A, V] =
-  AlphaNode[I, A, V](field: Attribute, attr: attr)
-
-proc newValueAlphaNode[I, A, V](value: V): AlphaNode[I, A, V] =
-  AlphaNode[I, A, V](field: Value, value: value)
-
-proc addCondition*[I, A, V](production: var Production[I, A, V], id: Var or I, attr: Var or A, value: Var or V) =
-  var condition = Condition[I, A, V]()
+proc addCondition*[T](production: var Production[T], id: Var or T, attr: Var or T, value: Var or T) =
+  var condition = Condition[T]()
   for fieldType in [Field.Identifier, Field.Attribute, Field.Value]:
     case fieldType:
       of Field.Identifier:
-        when id is I:
-          condition.nodes.add(newIdAlphaNode[I, A, V](id))
+        when id is T:
+          condition.nodes.add AlphaNode[T](testField: fieldType, testValue: id)
         else:
           var temp = id
           temp.field = fieldType
           condition.vars.add(temp)
       of Field.Attribute:
-        when attr is A:
-          condition.nodes.add(newAttrAlphaNode[I, A, V](attr))
+        when attr is T:
+          condition.nodes.add AlphaNode[T](testField: fieldType, testValue: attr)
         else:
           var temp = attr
           temp.field = fieldType
           condition.vars.add(temp)
       of Field.Value:
-        when value is V:
-          condition.nodes.add(newValueAlphaNode[I, A, V](value))
+        when value is T:
+          condition.nodes.add AlphaNode[T](testField: fieldType, testValue: value)
         else:
           var temp = value
           temp.field = fieldType
@@ -118,14 +96,14 @@ proc isAncestor(x, y: JoinNode): bool =
       node = node.parent.parent
   false
 
-proc addProduction*[I, A, V](session: Session[I, A, V], production: Production[I, A, V]): MemoryNode[I, A, V] =
+proc addProduction*[T](session: Session[T], production: Production[T]): MemoryNode[T] =
   var joins: Table[string, (Var, int)]
   result = session.betaNode
   let last = production.conditions.len - 1
   for i in 0 .. last:
     var condition = production.conditions[i]
     var leafNode = session.addNodes(condition.nodes)
-    var joinNode = JoinNode[I, A, V](parent: result, alphaNode: leafNode)
+    var joinNode = JoinNode[T](parent: result, alphaNode: leafNode)
     for v in condition.vars:
       if joins.hasKey(v.name):
         let (joinVar, condNum) = joins[v.name]
@@ -134,57 +112,24 @@ proc addProduction*[I, A, V](session: Session[I, A, V], production: Production[I
     result.children.add(joinNode)
     leafNode.successors.add(joinNode)
     # successors must be sorted by ancestry (descendents first) to avoid duplicate rule firings
-    leafNode.successors.sort(proc (x, y: JoinNode[I, A, V]): int =
+    leafNode.successors.sort(proc (x, y: JoinNode[T]): int =
       if isAncestor(x, y): 1 else: -1)
-    var newMemNode = MemoryNode[I, A, V](parent: joinNode, nodeType: if i == last: Full else: Partial)
+    var newMemNode = MemoryNode[T](parent: joinNode, nodeType: if i == last: Full else: Partial)
     if newMemNode.nodeType == Full:
       newMemNode.production = production
     joinNode.children.add(newMemNode)
     result = newMemNode
 
 proc performJoinTest(test: TestAtJoinNode, alphaFact: Fact, betaFact: Fact): bool =
-  let (alphaId, alphaAttr, alphaValue) = alphaFact
-  let (betaId, betaAttr, betaValue) = betaFact
-  case test.alphaField:
-    of Identifier:
-      case test.betaField:
-        of Identifier:
-          alphaId == betaId
-        of Attribute:
-          when alphaId is betaAttr.type:
-            alphaId == betaAttr
-          else:
-            false
-        of Value:
-          alphaId == betaValue
-    of Attribute:
-      case test.betaField:
-        of Identifier:
-          when alphaAttr is betaId.type:
-            alphaAttr == betaId
-          else:
-            false
-        of Attribute:
-          alphaAttr == betaAttr
-        of Value:
-          when alphaAttr is betaValue.type:
-            alphaAttr == betaValue
-          else:
-            false
-    of Value:
-      case test.betaField:
-        of Identifier:
-          when alphaValue is betaId.type:
-            alphaValue == betaId
-          else:
-            false
-        of Attribute:
-          when alphaValue is betaAttr.type:
-            alphaValue == betaAttr
-          else:
-            false
-        of Value:
-          alphaValue == betaValue
+  let arg1 = case test.alphaField:
+    of Field.Identifier: alphaFact[0]
+    of Field.Attribute: alphaFact[1]
+    of Field.Value: alphaFact[2]
+  let arg2 = case test.betaField:
+    of Field.Identifier: betaFact[0]
+    of Field.Attribute: betaFact[1]
+    of Field.Value: betaFact[2]
+  arg1 == arg2
 
 proc performJoinTests(tests: seq[TestAtJoinNode], facts: seq[Fact], alphaFact: Fact): bool =
   for test in tests:
@@ -193,47 +138,45 @@ proc performJoinTests(tests: seq[TestAtJoinNode], facts: seq[Fact], alphaFact: F
       return false
   true
 
-proc leftActivation[I, A, V](node: MemoryNode[I, A, V], facts: seq[Fact[I, A, V]], fact: Fact[I, A, V])
+proc leftActivation[T](node: MemoryNode[T], facts: seq[Fact[T]], fact: Fact[T])
 
-proc leftActivation[I, A, V](node: JoinNode[I, A, V], facts: seq[Fact[I, A, V]]) =
+proc leftActivation[T](node: JoinNode[T], facts: seq[Fact[T]]) =
   for alphaFact in node.alphaNode.facts:
     if performJoinTests(node.tests, facts, alphaFact):
       for child in node.children:
         child.leftActivation(facts, alphaFact)
 
-proc leftActivation[I, A, V](node: MemoryNode[I, A, V], facts: seq[Fact[I, A, V]], fact: Fact[I, A, V]) =
+proc leftActivation[T](node: MemoryNode[T], facts: seq[Fact[T]], fact: Fact[T]) =
   var newFacts = facts
   newFacts.add(fact)
   node.facts.add(newFacts)
   if node.nodeType == Full:
     assert node.production.conditions.len == newFacts.len
-    var ids: Vars[I]
-    var attrs: Vars[A]
-    var values: Vars[V]
+    var vars: Vars[T]
     for i in 0 ..< node.production.conditions.len:
       for v in node.production.conditions[i].vars:
         case v.field:
           of Identifier:
-            if ids.hasKey(v.name):
-              assert ids[v.name] == newFacts[i][0]
+            if vars.hasKey(v.name):
+              assert vars[v.name] == newFacts[i][0]
             else:
-              ids[v.name] = newFacts[i][0]
+              vars[v.name] = newFacts[i][0]
           of Attribute:
-            if attrs.hasKey(v.name):
-              assert attrs[v.name] == newFacts[i][1]
+            if vars.hasKey(v.name):
+              assert vars[v.name] == newFacts[i][1]
             else:
-              attrs[v.name] = newFacts[i][1]
+              vars[v.name] = newFacts[i][1]
           of Value:
-            if values.hasKey(v.name):
-              assert values[v.name] == newFacts[i][2]
+            if vars.hasKey(v.name):
+              assert vars[v.name] == newFacts[i][2]
             else:
-              values[v.name] = newFacts[i][2]
-    node.production.callback(ids, attrs, values)
+              vars[v.name] = newFacts[i][2]
+    node.production.callback(vars)
   else:
     for child in node.children:
       child.leftActivation(newFacts)
 
-proc rightActivation[I, A, V](node: JoinNode[I, A, V], fact: Fact[I, A, V]) =
+proc rightActivation[T](node: JoinNode[T], fact: Fact[T]) =
   if node.parent.nodeType == Root:
     for child in node.children:
       child.leftActivation(@[], fact)
@@ -248,34 +191,33 @@ proc rightActivation(node: AlphaNode, fact: Fact) =
   for child in node.successors:
     child.rightActivation(fact)
 
-proc addFact[I, A, V](node: AlphaNode, id: I, attr: A, value: V, root: bool): bool =
+proc addFact(node: AlphaNode, fact: Fact, root: bool): bool =
   if not root:
-    let match = case node.field:
-      of Field.Identifier: id == node.id
-      of Field.Attribute: attr == node.attr
-      of Field.Value: value == node.value
-    if not match:
+    let val = case node.testField:
+      of Field.Identifier: fact[0]
+      of Field.Attribute: fact[1]
+      of Field.Value: fact[2]
+    if val != node.testValue:
       return false
   for child in node.children:
-    if child.addFact(id, attr, value, false):
+    if child.addFact(fact, false):
       return true
-  let fact = (id, attr, value)
   node.rightActivation(fact)
   true
 
-proc addFact*[I, A, V](session: Session, id: I, attr: A, value: V) =
-  discard session.alphaNode.addFact(id, attr, value, true)
+proc addFact*(session: Session, fact: Fact) =
+  discard session.alphaNode.addFact(fact, true)
 
-proc newSession*[I, A, V](): Session[I, A, V] =
-  result.alphaNode = new(AlphaNode[I, A, V])
-  result.betaNode = new(MemoryNode[I, A, V])
+proc newSession*[T](): Session[T] =
+  result.alphaNode = new(AlphaNode[T])
+  result.betaNode = new(MemoryNode[T])
 
-proc newProduction*[I, A, V](cb: Callback[I, A, V]): Production[I, A, V] =
+proc newProduction*[T](cb: proc (vars: Vars[T])): Production[T] =
   result.callback = cb
 
 proc print(fact: Fact, indent: int): string
-proc print[I, A, V](node: JoinNode[I, A, V], indent: int): string
-proc print[I, A, V](node: MemoryNode[I, A, V], indent: int): string
+proc print[T](node: JoinNode[T], indent: int): string
+proc print[T](node: MemoryNode[T], indent: int): string
 proc print(node: AlphaNode, indent: int): string
 
 proc print(fact: Fact, indent: int): string =
@@ -284,14 +226,14 @@ proc print(fact: Fact, indent: int): string =
       result &= "  "
   result &= "Fact = {fact} \n".fmt
 
-proc print[I, A, V](node: JoinNode[I, A, V], indent: int): string =
+proc print[T](node: JoinNode[T], indent: int): string =
   for i in 0 ..< indent:
     result &= "  "
   result &= "JoinNode\n"
   for child in node.children:
     result &= print(child, indent+1)
 
-proc print[I, A, V](node: MemoryNode[I, A, V], indent: int): string =
+proc print[T](node: MemoryNode[T], indent: int): string =
   for i in 0 ..< indent:
     result &= "  "
   let cnt = node.facts.len
@@ -309,7 +251,7 @@ proc print(node: AlphaNode, indent: int): string =
   else:
     for i in 0 ..< indent:
       result &= "  "
-    result &= "{node.field} ({cnt})\n".fmt
+    result &= "{node.testField} = {node.testValue} ({cnt})\n".fmt
   for fact in node.facts:
     result &= print(fact, indent+1)
   for child in node.children:
