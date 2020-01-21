@@ -3,6 +3,9 @@ import pararules
 import tables
 
 type
+  Person = enum
+    Alice, Bob, Charlie, David, George,
+    Xavier, Yair, Zach
   Attr = enum
     Color, LeftOf, RightOf, Height, On, Self
   DataType = enum
@@ -42,14 +45,14 @@ test "number of conditions != number of facts":
 
   var session = newSession[Data, Attr, Data]()
   let prodNode = session.addProduction(prod)
-  session.addFact((newStr("Bob"), Color, newStr("blue")))
-  session.addFact((newStr("Yair"), LeftOf, newStr("Zach")))
-  session.addFact((newStr("Alice"), Color, newStr("maize")))
-  session.addFact((newStr("Yair"), RightOf, newStr("Bob")))
+  session.addFact(newStr("Bob"), Color, newStr("blue"))
+  session.addFact(newStr("Yair"), LeftOf, newStr("Zach"))
+  session.addFact(newStr("Alice"), Color, newStr("maize"))
+  session.addFact(newStr("Yair"), RightOf, newStr("Bob"))
 
-  session.addFact((newStr("Xavier"), Height, newInt(72)))
-  session.addFact((newStr("Thomas"), Height, newInt(72)))
-  session.addFact((newStr("Gilbert"), Height, newInt(72)))
+  session.addFact(newStr("Xavier"), Height, newInt(72))
+  session.addFact(newStr("Thomas"), Height, newInt(72))
+  session.addFact(newStr("Gilbert"), Height, newInt(72))
 
   check prodNode.facts.len == 3
   check prodNode.facts[0].len == 5
@@ -81,18 +84,18 @@ test "adding facts out of order":
 
   var session = newSession[Data, Attr, Data]()
   let prodNode = session.addProduction(prod)
-  session.addFact((newStr("Xavier"), On, newStr("Yair")))
-  session.addFact((newStr("Yair"), LeftOf, newStr("Zach")))
-  session.addFact((newStr("Zach"), Color, newStr("red")))
-  session.addFact((newStr("Alex"), Color, newStr("maize")))
-  session.addFact((newStr("Bob"), Color, newStr("blue")))
-  session.addFact((newStr("Charlie"), Color, newStr("green")))
- 
-  session.addFact((newStr("Seth"), On, newStr("table")))
-  session.addFact((newStr("Yair"), RightOf, newStr("Bob")))
-  session.addFact((newStr("Alex"), LeftOf, newStr("Daniel")))
+  session.addFact(newStr("Xavier"), On, newStr("Yair"))
+  session.addFact(newStr("Yair"), LeftOf, newStr("Zach"))
+  session.addFact(newStr("Zach"), Color, newStr("red"))
+  session.addFact(newStr("Alex"), Color, newStr("maize"))
+  session.addFact(newStr("Bob"), Color, newStr("blue"))
+  session.addFact(newStr("Charlie"), Color, newStr("green"))
 
-  session.addFact((newStr("Daniel"), Color, newStr("white")))
+  session.addFact(newStr("Seth"), On, newStr("table"))
+  session.addFact(newStr("Yair"), RightOf, newStr("Bob"))
+  session.addFact(newStr("Alex"), LeftOf, newStr("Daniel"))
+
+  session.addFact(newStr("Daniel"), Color, newStr("white"))
 
   check prodNode.facts.len == 1
   check prodNode.facts[0].len == 10
@@ -117,8 +120,8 @@ test "duplicate facts":
 
   var session = newSession[Data, Attr, Data]()
   let prodNode = session.addProduction(prod)
-  session.addFact((newStr("b1"), Self, newStr("b1")))
-  session.addFact((newStr("b1"), Color, newStr("red")))
+  session.addFact(newStr("b1"), Self, newStr("b1"))
+  session.addFact(newStr("b1"), Color, newStr("red"))
 
   check prodNode.facts.len == 1
   check prodNode.facts[0].len == 3

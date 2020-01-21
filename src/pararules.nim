@@ -248,22 +248,23 @@ proc rightActivation(node: AlphaNode, fact: Fact) =
   for child in node.successors:
     child.rightActivation(fact)
 
-proc addFact(node: AlphaNode, fact: Fact, root: bool): bool =
+proc addFact[I, A, V](node: AlphaNode, id: I, attr: A, value: V, root: bool): bool =
   if not root:
     let match = case node.field:
-      of Field.Identifier: fact[0] == node.id
-      of Field.Attribute: fact[1] == node.attr
-      of Field.Value: fact[2] == node.value
+      of Field.Identifier: id == node.id
+      of Field.Attribute: attr == node.attr
+      of Field.Value: value == node.value
     if not match:
       return false
   for child in node.children:
-    if child.addFact(fact, false):
+    if child.addFact(id, attr, value, false):
       return true
+  let fact = (id, attr, value)
   node.rightActivation(fact)
   true
 
-proc addFact*(session: Session, fact: Fact) =
-  discard session.alphaNode.addFact(fact, true)
+proc addFact*[I, A, V](session: Session, id: I, attr: A, value: V) =
+  discard session.alphaNode.addFact(id, attr, value, true)
 
 proc newSession*[I, A, V](): Session[I, A, V] =
   result.alphaNode = new(AlphaNode[I, A, V])
