@@ -5,6 +5,7 @@ type
   Field = enum
     Identifier, Attribute, Value
   Fact[T] = tuple[id: T, attr: T, value: T]
+  Token[T] = tuple[fact: Fact[T], insert: bool]
   # alpha network
   AlphaNode[T] = ref object
     testField: Field
@@ -138,18 +139,23 @@ proc performJoinTests(tests: seq[TestAtJoinNode], facts: seq[Fact], alphaFact: F
       return false
   true
 
-proc leftActivation[T](node: MemoryNode[T], facts: seq[Fact[T]], fact: Fact[T])
+proc leftActivation[T](node: MemoryNode[T], facts: seq[Fact[T]], token: Token[T])
 
-proc leftActivation[T](node: JoinNode[T], facts: seq[Fact[T]]) =
+proc leftActivation[T](node: JoinNode[T], facts: seq[Fact[T]], insert: bool) =
   for alphaFact in node.alphaNode.facts:
     if performJoinTests(node.tests, facts, alphaFact):
       for child in node.children:
-        child.leftActivation(facts, alphaFact)
+        child.leftActivation(facts, (alphaFact, insert))
 
-proc leftActivation[T](node: MemoryNode[T], facts: seq[Fact[T]], fact: Fact[T]) =
+proc leftActivation[T](node: MemoryNode[T], facts: seq[Fact[T]], token: Token[T]) =
   var newFacts = facts
-  newFacts.add(fact)
-  node.facts.add(newFacts)
+  newFacts.add(token.fact)
+  if token.insert:
+    node.facts.add(newFacts)
+  else:
+    let index = node.facts.find(newFacts)
+    assert index >= 0
+    node.facts.delete(index)
   if node.nodeType == Full:
     assert node.production.conditions.len == newFacts.len
     var vars: Vars[T]
@@ -174,24 +180,29 @@ proc leftActivation[T](node: MemoryNode[T], facts: seq[Fact[T]], fact: Fact[T]) 
     node.production.callback(vars)
   else:
     for child in node.children:
-      child.leftActivation(newFacts)
+      child.leftActivation(newFacts, token.insert)
 
-proc rightActivation[T](node: JoinNode[T], fact: Fact[T]) =
+proc rightActivation[T](node: JoinNode[T], token: Token[T]) =
   if node.parent.nodeType == Root:
     for child in node.children:
-      child.leftActivation(@[], fact)
+      child.leftActivation(@[], token)
   else:
     for facts in node.parent.facts:
-      if performJoinTests(node.tests, facts, fact):
+      if performJoinTests(node.tests, facts, token.fact):
         for child in node.children:
-          child.leftActivation(facts, fact)
+          child.leftActivation(facts, token)
 
-proc rightActivation(node: AlphaNode, fact: Fact) =
-  node.facts.add(fact)
+proc rightActivation[T](node: AlphaNode[T], token: Token[T]) =
+  if token.insert:
+    node.facts.add(token.fact)
+  else:
+    let index = node.facts.find(token.fact)
+    assert index >= 0
+    node.facts.delete(index)
   for child in node.successors:
-    child.rightActivation(fact)
+    child.rightActivation(token)
 
-proc addFact(node: AlphaNode, fact: Fact, root: bool): bool =
+proc addFact(node: AlphaNode, fact: Fact, root: bool, insert: bool): bool =
   if not root:
     let val = case node.testField:
       of Field.Identifier: fact[0]
@@ -200,13 +211,16 @@ proc addFact(node: AlphaNode, fact: Fact, root: bool): bool =
     if val != node.testValue:
       return false
   for child in node.children:
-    if child.addFact(fact, false):
+    if child.addFact(fact, false, insert):
       return true
-  node.rightActivation(fact)
+  node.rightActivation((fact, insert))
   true
 
 proc addFact*(session: Session, fact: Fact) =
-  discard session.alphaNode.addFact(fact, true)
+  discard session.alphaNode.addFact(fact, true, true)
+
+proc removeFact*(session: Session, fact: Fact) =
+  discard session.alphaNode.addFact(fact, true, false)
 
 proc newSession*[T](): Session[T] =
   result.alphaNode = new(AlphaNode[T])

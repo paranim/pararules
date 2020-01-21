@@ -85,3 +85,22 @@ test "duplicate facts":
   check prodNode.facts.len == 1
   check prodNode.facts[0].len == 3
 
+test "removing facts":
+  var vars: Table[string, Data]
+  var prod = newProduction[Data](proc (v: Table[string, Data]) = vars = v)
+  prod.addCondition(Var(name: "b"), Str("color"), Str("blue"))
+  prod.addCondition(Var(name: "y"), Str("left-of"), Var(name: "z"))
+  prod.addCondition(Var(name: "a"), Str("color"), Str("maize"))
+  prod.addCondition(Var(name: "y"), Var(name: "a"), Var(name: "b"))
+
+  var session = newSession[Data]()
+  let prodNode = session.addProduction(prod)
+  session.addFact((Str("Bob"), Str("color"), Str("blue")))
+  session.addFact((Str("Yair"), Str("left-of"), Str("Zach")))
+  session.addFact((Str("Alice"), Str("color"), Str("maize")))
+  session.addFact((Str("Yair"), Str("Alice"), Str("Bob")))
+  check prodNode.facts.len == 1
+
+  session.removeFact((Str("Bob"), Str("color"), Str("blue")))
+  check prodNode.facts.len == 0
+
