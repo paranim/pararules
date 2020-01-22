@@ -110,6 +110,12 @@ test "removing facts":
   session.addFact((Id(Yair), Attr(RightOf), Id(Bob)))
   check prodNode.facts.len == 1
 
+  session.removeFact((Id(Yair), Attr(RightOf), Id(Bob)))
+  check prodNode.facts.len == 0
+  check prodNode.getParent.facts.len == 1
+  check prodNode.getParent.facts[0].len == 3
+
   session.removeFact((Id(Bob), Attr(Color), Str("blue")))
   check prodNode.facts.len == 0
+  check prodNode.getParent.facts.len == 0
 

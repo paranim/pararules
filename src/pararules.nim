@@ -6,11 +6,12 @@ type
     Identifier, Attribute, Value
   Fact[T] = tuple[id: T, attr: T, value: T]
   Token[T] = tuple[fact: Fact[T], insert: bool]
+  IdAttr = tuple[id: int, attr: int]
   # alpha network
   AlphaNode[T] = ref object
     testField: Field
     testValue: T
-    facts: seq[Fact[T]]
+    facts: Table[IdAttr, Fact[T]]
     successors: seq[JoinNode[T]]
     children: seq[AlphaNode[T]]
   # beta network
@@ -24,6 +25,7 @@ type
     parent: JoinNode[T]
     children: seq[JoinNode[T]]
     facts*: seq[seq[Fact[T]]]
+    factIndex: Table[IdAttr, int]
     case nodeType: NodeType
     of Full:
       production: Production[T]
@@ -48,6 +50,9 @@ type
   Session[T] = object
     alphaNode: AlphaNode[T]
     betaNode: MemoryNode[T]
+
+proc getParent*(node: MemoryNode): MemoryNode =
+  node.parent.parent
 
 proc addNode(node: AlphaNode, newNode: AlphaNode): AlphaNode =
   for child in node.children:
@@ -142,7 +147,7 @@ proc performJoinTests(tests: seq[TestAtJoinNode], facts: seq[Fact], alphaFact: F
 proc leftActivation[T](node: MemoryNode[T], facts: seq[Fact[T]], token: Token[T])
 
 proc leftActivation[T](node: JoinNode[T], facts: seq[Fact[T]], insert: bool) =
-  for alphaFact in node.alphaNode.facts:
+  for alphaFact in node.alphaNode.facts.values:
     if performJoinTests(node.tests, facts, alphaFact):
       for child in node.children:
         child.leftActivation(facts, (alphaFact, insert))
@@ -150,12 +155,19 @@ proc leftActivation[T](node: JoinNode[T], facts: seq[Fact[T]], insert: bool) =
 proc leftActivation[T](node: MemoryNode[T], facts: seq[Fact[T]], token: Token[T]) =
   var newFacts = facts
   newFacts.add(token.fact)
+
+  let id = token.fact.id.idVal.ord
+  let attr = token.fact.attr.attrVal.ord
+  let idAttr = (id, attr)
   if token.insert:
+    let index = node.facts.len
     node.facts.add(newFacts)
+    node.factIndex[idAttr] = index
   else:
-    let index = node.facts.find(newFacts)
-    assert index >= 0
+    let index = node.factIndex[idAttr]
     node.facts.delete(index)
+    node.factIndex.del(idAttr)
+
   if node.nodeType == Full:
     assert node.production.conditions.len == newFacts.len
     var vars: Vars[T]
@@ -193,12 +205,12 @@ proc rightActivation[T](node: JoinNode[T], token: Token[T]) =
           child.leftActivation(facts, token)
 
 proc rightActivation[T](node: AlphaNode[T], token: Token[T]) =
+  let id = token.fact.id.idVal.ord
+  let attr = token.fact.attr.attrVal.ord
   if token.insert:
-    node.facts.add(token.fact)
+    node.facts[(id, attr)] = token.fact
   else:
-    let index = node.facts.find(token.fact)
-    assert index >= 0
-    node.facts.delete(index)
+    node.facts.del((id, attr))
   for child in node.successors:
     child.rightActivation(token)
 
