@@ -8,7 +8,7 @@ type
     Alice, Bob, Charlie, David, George,
     Seth, Thomas, Xavier, Yair, Zach
   Property = enum
-    Color, LeftOf, Height, On, Self
+    Color, LeftOf, RightOf, Height, On, Self
 
 variant Data:
   Id(idVal: Person)
@@ -22,7 +22,7 @@ test "number of conditions != number of facts":
   prod.addCondition(Var(name: "b"), Attr(Color), Str("blue"))
   prod.addCondition(Var(name: "y"), Attr(LeftOf), Var(name: "z"))
   prod.addCondition(Var(name: "a"), Attr(Color), Str("maize"))
-  prod.addCondition(Var(name: "y"), Var(name: "a"), Var(name: "b"))
+  prod.addCondition(Var(name: "y"), Attr(RightOf), Var(name: "b"))
   prod.addCondition(Var(name: "x"), Attr(Height), Var(name: "h"))
 
   var session = newSession[Data]()
@@ -30,7 +30,7 @@ test "number of conditions != number of facts":
   session.addFact((Id(Bob), Attr(Color), Str("blue")))
   session.addFact((Id(Yair), Attr(LeftOf), Id(Zach)))
   session.addFact((Id(Alice), Attr(Color), Str("maize")))
-  session.addFact((Id(Yair), Id(Alice), Id(Bob)))
+  session.addFact((Id(Yair), Attr(RightOf), Id(Bob)))
 
   session.addFact((Id(Xavier), Attr(Height), Int(72)))
   session.addFact((Id(Thomas), Attr(Height), Int(72)))
@@ -54,7 +54,7 @@ test "adding facts out of order":
   prod.addCondition(Var(name: "c"), Attr(Color), Str("green"))
   prod.addCondition(Var(name: "d"), Attr(Color), Str("white"))
   prod.addCondition(Var(name: "s"), Attr(On), Str("table"))
-  prod.addCondition(Var(name: "y"), Var(name: "a"), Var(name: "b"))
+  prod.addCondition(Var(name: "y"), Attr(RightOf), Var(name: "b"))
   prod.addCondition(Var(name: "a"), Attr(LeftOf), Var(name: "d"))
 
   var session = newSession[Data]()
@@ -67,7 +67,7 @@ test "adding facts out of order":
   session.addFact((Id(Charlie), Attr(Color), Str("green")))
  
   session.addFact((Id(Seth), Attr(On), Str("table")))
-  session.addFact((Id(Yair), Id(Alice), Id(Bob)))
+  session.addFact((Id(Yair), Attr(RightOf), Id(Bob)))
   session.addFact((Id(Alice), Attr(LeftOf), Id(David)))
 
   session.addFact((Id(David), Attr(Color), Str("white")))
@@ -100,14 +100,14 @@ test "removing facts":
   prod.addCondition(Var(name: "b"), Attr(Color), Str("blue"))
   prod.addCondition(Var(name: "y"), Attr(LeftOf), Var(name: "z"))
   prod.addCondition(Var(name: "a"), Attr(Color), Str("maize"))
-  prod.addCondition(Var(name: "y"), Var(name: "a"), Var(name: "b"))
+  prod.addCondition(Var(name: "y"), Attr(RightOf), Var(name: "b"))
 
   var session = newSession[Data]()
   let prodNode = session.addProduction(prod)
   session.addFact((Id(Bob), Attr(Color), Str("blue")))
   session.addFact((Id(Yair), Attr(LeftOf), Id(Zach)))
   session.addFact((Id(Alice), Attr(Color), Str("maize")))
-  session.addFact((Id(Yair), Id(Alice), Id(Bob)))
+  session.addFact((Id(Yair), Attr(RightOf), Id(Bob)))
   check prodNode.facts.len == 1
 
   session.removeFact((Id(Bob), Attr(Color), Str("blue")))
