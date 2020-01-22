@@ -50,6 +50,7 @@ type
   Session[T] = object
     alphaNode: AlphaNode[T]
     betaNode: MemoryNode[T]
+    allFacts: Table[IdAttr, Fact[T]]
 
 proc getParent*(node: MemoryNode): MemoryNode =
   node.parent.parent
@@ -228,10 +229,16 @@ proc addFact(node: AlphaNode, fact: Fact, root: bool, insert: bool): bool =
   node.rightActivation((fact, insert))
   true
 
-proc addFact*(session: Session, fact: Fact) =
+proc addFact*[T](session: var Session[T], fact: Fact[T]) =
+  let id = fact.id.idVal.ord
+  let attr = fact.attr.attrVal.ord
+  let idAttr = (id, attr)
+  if session.allFacts.hasKey(idAttr):
+    session.removeFact(session.allFacts[idAttr])
+  session.allFacts[idAttr] = fact
   discard session.alphaNode.addFact(fact, true, true)
 
-proc removeFact*(session: Session, fact: Fact) =
+proc removeFact*[T](session: Session[T], fact: Fact[T]) =
   discard session.alphaNode.addFact(fact, true, false)
 
 proc newSession*[T](): Session[T] =

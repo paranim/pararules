@@ -119,3 +119,23 @@ test "removing facts":
   check prodNode.facts.len == 0
   check prodNode.getParent.facts.len == 0
 
+test "updating facts":
+  var vars: Table[string, Data]
+  var prod = newProduction[Data](proc (v: Table[string, Data]) = vars = v)
+  prod.addCondition(Var(name: "b"), Attr(Color), Str("blue"))
+  prod.addCondition(Var(name: "y"), Attr(LeftOf), Var(name: "z"))
+  prod.addCondition(Var(name: "a"), Attr(Color), Str("maize"))
+  prod.addCondition(Var(name: "y"), Attr(RightOf), Var(name: "b"))
+
+  var session = newSession[Data]()
+  let prodNode = session.addProduction(prod)
+  session.addFact((Id(Bob), Attr(Color), Str("blue")))
+  session.addFact((Id(Yair), Attr(LeftOf), Id(Zach)))
+  session.addFact((Id(Alice), Attr(Color), Str("maize")))
+  session.addFact((Id(Yair), Attr(RightOf), Id(Bob)))
+  check prodNode.facts.len == 1
+  check vars["z"] == Id(Zach)
+
+  session.addFact((Id(Yair), Attr(LeftOf), Id(Xavier)))
+  check vars["z"] == Id(Xavier)
+
