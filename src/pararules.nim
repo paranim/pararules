@@ -25,7 +25,6 @@ type
     parent: JoinNode[T]
     children: seq[JoinNode[T]]
     facts*: seq[seq[Fact[T]]]
-    factIndex: Table[IdAttr, int]
     case nodeType: NodeType
     of Full:
       production: Production[T]
@@ -157,17 +156,12 @@ proc leftActivation[T](node: MemoryNode[T], facts: seq[Fact[T]], token: Token[T]
   var newFacts = facts
   newFacts.add(token.fact)
 
-  let id = token.fact.id.idVal.ord
-  let attr = token.fact.attr.attrVal.ord
-  let idAttr = (id, attr)
   if token.insert:
-    let index = node.facts.len
     node.facts.add(newFacts)
-    node.factIndex[idAttr] = index
   else:
-    let index = node.factIndex[idAttr]
+    let index = node.facts.find(newFacts)
+    assert index >= 0
     node.facts.delete(index)
-    node.factIndex.del(idAttr)
 
   if node.nodeType == Full:
     assert node.production.conditions.len == newFacts.len
