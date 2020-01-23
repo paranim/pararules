@@ -19,22 +19,29 @@ type
     alphaField: Field
     betaField: Field
     condition: int
-  NodeType = enum
+  MemoryNodeType = enum
     Root, Partial, Full
   MemoryNode[T] = ref object
     parent: JoinNode[T]
     children: seq[JoinNode[T]]
     facts*: seq[seq[Fact[T]]]
-    case nodeType: NodeType
-    of Full:
-      production: Production[T]
-    else:
-      nil
+    case nodeType: MemoryNodeType
+      of Full:
+        production: Production[T]
+      else:
+        nil
+  JoinNodeType = enum
+    Join, JoinAndFilter
   JoinNode[T] = ref object
     parent: MemoryNode[T]
     children: seq[MemoryNode[T]]
     alphaNode: AlphaNode[T]
     tests: seq[TestAtJoinNode]
+    case nodeType: JoinNodeType
+      of Join:
+        nil
+      of JoinAndFilter:
+        production: Production[T]
   # session
   Vars[T] = Table[string, T]
   Var* = object
@@ -43,6 +50,7 @@ type
   Condition[T] = object
     nodes: seq[AlphaNode[T]]
     vars: seq[Var]
+    filter: proc (v: Vars[T]): bool
   Production[T] = object
     conditions: seq[Condition[T]]
     callback: proc (vars: Vars[T])
@@ -66,8 +74,8 @@ proc addNodes(session: Session, nodes: seq[AlphaNode]): AlphaNode =
   for node in nodes:
     result = result.addNode(node)
 
-proc addCondition*[T](production: var Production[T], id: Var or T, attr: Var or T, value: Var or T) =
-  var condition = Condition[T]()
+proc addCondition*[T](production: var Production[T], id: Var or T, attr: Var or T, value: Var or T, filter: proc (v: Vars[T]): bool = nil) =
+  var condition = Condition[T](filter: filter)
   for fieldType in [Field.Identifier, Field.Attribute, Field.Value]:
     case fieldType:
       of Field.Identifier:
@@ -109,7 +117,9 @@ proc addProduction*[T](session: Session[T], production: Production[T]): MemoryNo
   for i in 0 .. last:
     var condition = production.conditions[i]
     var leafNode = session.addNodes(condition.nodes)
-    var joinNode = JoinNode[T](parent: result, alphaNode: leafNode)
+    var joinNode = JoinNode[T](parent: result, alphaNode: leafNode, nodeType: if condition.filter != nil: JoinAndFilter else: Join)
+    if joinNode.nodeType == JoinAndFilter:
+      joinNode.production = production
     for v in condition.vars:
       if joins.hasKey(v.name):
         let (joinVar, condNum) = joins[v.name]
@@ -126,6 +136,28 @@ proc addProduction*[T](session: Session[T], production: Production[T]): MemoryNo
     joinNode.children.add(newMemNode)
     result = newMemNode
 
+proc getVarsFromFacts[T](conditions: seq[Condition[T]], facts: seq[Fact[T]]): Vars[T] =
+  var vars: Vars[T]
+  for i in 0 ..< facts.len:
+    for v in conditions[i].vars:
+      case v.field:
+        of Identifier:
+          if vars.hasKey(v.name):
+            assert vars[v.name] == facts[i][0]
+          else:
+            vars[v.name] = facts[i][0]
+        of Attribute:
+          if vars.hasKey(v.name):
+            assert vars[v.name] == facts[i][1]
+          else:
+            vars[v.name] = facts[i][1]
+        of Value:
+          if vars.hasKey(v.name):
+            assert vars[v.name] == facts[i][2]
+          else:
+            vars[v.name] = facts[i][2]
+  vars
+
 proc performJoinTest(test: TestAtJoinNode, alphaFact: Fact, betaFact: Fact): bool =
   let arg1 = case test.alphaField:
     of Field.Identifier: alphaFact[0]
@@ -137,10 +169,18 @@ proc performJoinTest(test: TestAtJoinNode, alphaFact: Fact, betaFact: Fact): boo
     of Field.Value: betaFact[2]
   arg1 == arg2
 
-proc performJoinTests(tests: seq[TestAtJoinNode], facts: seq[Fact], alphaFact: Fact): bool =
-  for test in tests:
+proc performJoinTests(node: JoinNode, facts: seq[Fact], alphaFact: Fact): bool =
+  for test in node.tests:
     let betaFact = facts[test.condition]
     if not performJoinTest(test, alphaFact, betaFact):
+      return false
+  if node.nodeType == JoinAndFilter:
+    var newFacts = facts
+    newFacts.add(alphaFact)
+    let vars = getVarsFromFacts(node.production.conditions, newFacts)
+    let index = facts.len
+    let filter = node.production.conditions[index].filter
+    if not filter(vars):
       return false
   true
 
@@ -148,7 +188,7 @@ proc leftActivation[T](node: MemoryNode[T], facts: seq[Fact[T]], token: Token[T]
 
 proc leftActivation[T](node: JoinNode[T], facts: seq[Fact[T]], insert: bool) =
   for alphaFact in node.alphaNode.facts.values:
-    if performJoinTests(node.tests, facts, alphaFact):
+    if performJoinTests(node, facts, alphaFact):
       for child in node.children:
         child.leftActivation(facts, (alphaFact, insert))
 
@@ -165,25 +205,7 @@ proc leftActivation[T](node: MemoryNode[T], facts: seq[Fact[T]], token: Token[T]
 
   if node.nodeType == Full:
     assert node.production.conditions.len == newFacts.len
-    var vars: Vars[T]
-    for i in 0 ..< node.production.conditions.len:
-      for v in node.production.conditions[i].vars:
-        case v.field:
-          of Identifier:
-            if vars.hasKey(v.name):
-              assert vars[v.name] == newFacts[i][0]
-            else:
-              vars[v.name] = newFacts[i][0]
-          of Attribute:
-            if vars.hasKey(v.name):
-              assert vars[v.name] == newFacts[i][1]
-            else:
-              vars[v.name] = newFacts[i][1]
-          of Value:
-            if vars.hasKey(v.name):
-              assert vars[v.name] == newFacts[i][2]
-            else:
-              vars[v.name] = newFacts[i][2]
+    let vars = getVarsFromFacts(node.production.conditions, newFacts)
     node.production.callback(vars)
   else:
     for child in node.children:
@@ -195,7 +217,7 @@ proc rightActivation[T](node: JoinNode[T], token: Token[T]) =
       child.leftActivation(@[], token)
   else:
     for facts in node.parent.facts:
-      if performJoinTests(node.tests, facts, token.fact):
+      if performJoinTests(node, facts, token.fact):
         for child in node.children:
           child.leftActivation(facts, token)
 
