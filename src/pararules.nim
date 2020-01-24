@@ -47,13 +47,15 @@ type
   Var* = object
     name*: string
     field: Field
+  CallbackFn[T] = proc (vars: Vars[T])
+  FilterFn[T] = proc (vars: Vars[T]): bool
   Condition[T] = object
     nodes: seq[AlphaNode[T]]
     vars: seq[Var]
-    filter: proc (v: Vars[T]): bool
+    filter: FilterFn[T]
   Production[T] = object
     conditions: seq[Condition[T]]
-    callback: proc (vars: Vars[T])
+    callback: CallbackFn[T]
   Session[T] = object
     alphaNode: AlphaNode[T]
     betaNode: MemoryNode[T]
@@ -74,7 +76,7 @@ proc addNodes(session: Session, nodes: seq[AlphaNode]): AlphaNode =
   for node in nodes:
     result = result.addNode(node)
 
-proc addCondition*[T](production: var Production[T], id: Var or T, attr: Var or T, value: Var or T, filter: proc (v: Vars[T]): bool = nil) =
+proc addCondition*[T](production: var Production[T], id: Var or T, attr: Var or T, value: Var or T, filter: FilterFn[T] = nil) =
   var condition = Condition[T](filter: filter)
   for fieldType in [Field.Identifier, Field.Attribute, Field.Value]:
     case fieldType:
@@ -261,7 +263,7 @@ proc newSession*[T](): Session[T] =
   result.alphaNode = new(AlphaNode[T])
   result.betaNode = new(MemoryNode[T])
 
-proc newProduction*[T](cb: proc (vars: Vars[T])): Production[T] =
+proc newProduction*[T](cb: CallbackFn[T]): Production[T] =
   result.callback = cb
 
 proc print(fact: Fact, indent: int): string
