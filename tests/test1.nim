@@ -137,6 +137,7 @@ test "updating facts":
   check vars["z"] == Id(Zach)
 
   session.addFact((Id(Yair), Attr(LeftOf), Id(Xavier)))
+  check prodNode.facts.len == 1
   check vars["z"] == Id(Xavier)
 
 test "complex conditions":

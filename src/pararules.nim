@@ -57,7 +57,6 @@ type
   Session[T] = object
     alphaNode: AlphaNode[T]
     betaNode: MemoryNode[T]
-    allFacts: Table[IdAttr, Fact[T]]
 
 proc getParent*(node: MemoryNode): MemoryNode =
   node.parent.parent
@@ -221,17 +220,20 @@ proc rightActivation[T](node: JoinNode[T], token: Token[T]) =
         for child in node.children:
           child.leftActivation(facts, token)
 
-proc rightActivation[T](node: AlphaNode[T], token: Token[T]) =
+proc rightActivation[T](session: var Session[T], node: AlphaNode[T], token: Token[T]) =
   let id = token.fact.id.idVal.ord
   let attr = token.fact.attr.attrVal.ord
+  let idAttr = (id, attr)
   if token.insert:
-    node.facts[(id, attr)] = token.fact
+    if node.facts.hasKey(idAttr):
+      session.removeFact(node.facts[idAttr])
+    node.facts[idAttr] = token.fact
   else:
-    node.facts.del((id, attr))
+    node.facts.del(idAttr)
   for child in node.successors:
     child.rightActivation(token)
 
-proc addFact(node: AlphaNode, fact: Fact, root: bool, insert: bool): bool =
+proc addFact[T](session: var Session[T], node: AlphaNode[T], fact: Fact[T], root: bool, insert: bool): bool =
   if not root:
     let val = case node.testField:
       of Field.Identifier: fact[0]
@@ -240,22 +242,16 @@ proc addFact(node: AlphaNode, fact: Fact, root: bool, insert: bool): bool =
     if val != node.testValue:
       return false
   for child in node.children:
-    if child.addFact(fact, false, insert):
+    if session.addFact(child, fact, false, insert):
       return true
-  node.rightActivation((fact, insert))
+  session.rightActivation(node, (fact, insert))
   true
 
 proc addFact*[T](session: var Session[T], fact: Fact[T]) =
-  let id = fact.id.idVal.ord
-  let attr = fact.attr.attrVal.ord
-  let idAttr = (id, attr)
-  if session.allFacts.hasKey(idAttr):
-    session.removeFact(session.allFacts[idAttr])
-  session.allFacts[idAttr] = fact
-  discard session.alphaNode.addFact(fact, true, true)
+  discard session.addFact(session.alphaNode, fact, true, true)
 
-proc removeFact*[T](session: Session[T], fact: Fact[T]) =
-  discard session.alphaNode.addFact(fact, true, false)
+proc removeFact*[T](session: var Session[T], fact: Fact[T]) =
+  discard session.addFact(session.alphaNode, fact, true, false)
 
 proc newSession*[T](): Session[T] =
   result.alphaNode = new(AlphaNode[T])
