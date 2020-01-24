@@ -205,7 +205,7 @@ proc leftActivation[T](node: MemoryNode[T], facts: seq[Fact[T]], token: Token[T]
     assert index >= 0
     node.facts.delete(index)
 
-  if node.nodeType == Full:
+  if node.nodeType == Full and token.insert:
     assert node.production.conditions.len == newFacts.len
     let vars = getVarsFromFacts(node.production.conditions, newFacts)
     node.production.callback(vars)
