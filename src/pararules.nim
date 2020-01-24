@@ -1,4 +1,4 @@
-import strformat, tables, algorithm
+import strformat, tables, algorithm, macros
 
 type
   # facts
@@ -265,6 +265,71 @@ proc newSession*[T](): Session[T] =
 
 proc newProduction*[T](cb: CallbackFn[T]): Production[T] =
   result.callback = cb
+
+proc wrapVar(node: NimNode): NimNode =
+  if node.kind == nnkIdent:
+    let s = node.strVal
+    quote do:
+      Var(name: `s`)
+  else:
+    node
+
+proc createLet(node: NimNode, paramNode: NimNode): NimNode =
+  var t: Table[string, NimNode]
+  for child in node:
+    expectKind(child, nnkPar)
+    for i in 0..2:
+      if child[i].kind == nnkIdent:
+        let s = child[i].strVal
+        if not t.hasKey(s):
+          t[s] = quote do:
+            `paramNode`[`s`]
+  result = newStmtList()
+  for (s, val) in t.pairs():
+    result.add(newLetStmt(
+      newIdentNode(s),
+      val
+    ))
+
+proc parseCond(prod: NimNode, node: NimNode): NimNode =
+  expectKind(node, nnkPar)
+  let id = wrapVar(node[0])
+  let attr = wrapVar(node[1])
+  let value = wrapVar(node[2])
+  quote do:
+    addCondition(`prod`, `id`, `attr`, `value`)
+
+proc parseWhat(dataType: NimNode, node: NimNode, thenNode: NimNode): NimNode =
+  expectKind(node, nnkStmtList)
+  let prod = genSym(nskVar, "prod")
+  let v = genSym(nskParam, "v")
+  if thenNode != nil:
+    let letNode = createLet(node, v)
+    result = newStmtList(quote do:
+      var `prod` = newProduction[`dataType`](proc (`v`: Table[string, `dataType`]) =
+        `letNode`
+        `thenNode`
+      )
+    )
+  else:
+    result = newStmtList(quote do:
+      var `prod` = newProduction[`dataType`](proc (`v`: Table[string, `dataType`]) = discard
+      )
+    )
+  for child in node:
+    result.add parseCond(prod, child)
+  result.add prod
+
+macro rule*(dataType: type, body: untyped): untyped =
+  expectKind(body, nnkStmtList)
+  result = newStmtList()
+  var t: Table["string", NimNode]
+  for child in body:
+    expectKind(child, nnkCall)
+    let id = child[0]
+    expectKind(id, nnkIdent)
+    t[id.strVal] = child[1]
+  result.add parseWhat(dataType, t["what"], if t.hasKey("then"): t["then"] else: nil)
 
 proc print(fact: Fact, indent: int): string
 proc print[T](node: JoinNode[T], indent: int): string

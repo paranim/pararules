@@ -17,13 +17,19 @@ variant Data:
   Int(intVal: int)
 
 test "number of conditions != number of facts":
-  var vars: Table[string, Data]
-  var prod = newProduction[Data](proc (v: Table[string, Data]) = vars = v)
-  prod.addCondition(Var(name: "b"), Attr(Color), Str("blue"))
-  prod.addCondition(Var(name: "y"), Attr(LeftOf), Var(name: "z"))
-  prod.addCondition(Var(name: "a"), Attr(Color), Str("maize"))
-  prod.addCondition(Var(name: "y"), Attr(RightOf), Var(name: "b"))
-  prod.addCondition(Var(name: "x"), Attr(Height), Var(name: "h"))
+  let prod =
+    rule(Data):
+      what:
+        (b, Attr(Color), Str("blue"))
+        (y, Attr(LeftOf), z)
+        (a, Attr(Color), Str("maize"))
+        (y, Attr(RightOf), b)
+        (x, Attr(Height), h)
+      then:
+        check a == Id(Alice)
+        check b == Id(Bob)
+        check y == Id(Yair)
+        check z == Id(Zach)
 
   var session = newSession[Data]()
   let prodNode = session.addProduction(prod)
@@ -38,24 +44,26 @@ test "number of conditions != number of facts":
 
   check prodNode.facts.len == 3
   check prodNode.facts[0].len == 5
-  check vars["a"] == Id(Alice)
-  check vars["b"] == Id(Bob)
-  check vars["y"] == Id(Yair)
-  check vars["z"] == Id(Zach)
 
 test "adding facts out of order":
-  var vars: Table[string, Data]
-  var prod = newProduction[Data](proc (v: Table[string, Data]) = vars = v)
-  prod.addCondition(Var(name: "x"), Attr(On), Var(name: "y"))
-  prod.addCondition(Var(name: "y"), Attr(LeftOf), Var(name: "z"))
-  prod.addCondition(Var(name: "z"), Attr(Color), Str("red"))
-  prod.addCondition(Var(name: "a"), Attr(Color), Str("maize"))
-  prod.addCondition(Var(name: "b"), Attr(Color), Str("blue"))
-  prod.addCondition(Var(name: "c"), Attr(Color), Str("green"))
-  prod.addCondition(Var(name: "d"), Attr(Color), Str("white"))
-  prod.addCondition(Var(name: "s"), Attr(On), Str("table"))
-  prod.addCondition(Var(name: "y"), Attr(RightOf), Var(name: "b"))
-  prod.addCondition(Var(name: "a"), Attr(LeftOf), Var(name: "d"))
+  let prod =
+    rule(Data):
+      what:
+        (x, Attr(On), y)
+        (y, Attr(LeftOf), z)
+        (z, Attr(Color), Str("red"))
+        (a, Attr(Color), Str("maize"))
+        (b, Attr(Color), Str("blue"))
+        (c, Attr(Color), Str("green"))
+        (d, Attr(Color), Str("white"))
+        (s, Attr(On), Str("table"))
+        (y, Attr(RightOf), b)
+        (a, Attr(LeftOf), d)
+      then:
+        check a == Id(Alice)
+        check b == Id(Bob)
+        check y == Id(Yair)
+        check z == Id(Zach)
 
   var session = newSession[Data]()
   let prodNode = session.addProduction(prod)
@@ -74,17 +82,14 @@ test "adding facts out of order":
 
   check prodNode.facts.len == 1
   check prodNode.facts[0].len == 10
-  check vars["a"] == Id(Alice)
-  check vars["b"] == Id(Bob)
-  check vars["y"] == Id(Yair)
-  check vars["z"] == Id(Zach)
 
 test "duplicate facts":
-  var vars: Table[string, Data]
-  var prod = newProduction[Data](proc (v: Table[string, Data]) = vars = v)
-  prod.addCondition(Var(name: "x"), Attr(Self), Var(name: "y"))
-  prod.addCondition(Var(name: "x"), Attr(Color), Str("red"))
-  prod.addCondition(Var(name: "y"), Attr(Color), Str("red"))
+  let prod =
+    rule(Data):
+      what:
+        (x, Attr(Self), y)
+        (x, Attr(Color), Str("red"))
+        (y, Attr(Color), Str("red"))
 
   var session = newSession[Data]()
   let prodNode = session.addProduction(prod)
@@ -95,12 +100,13 @@ test "duplicate facts":
   check prodNode.facts[0].len == 3
 
 test "removing facts":
-  var vars: Table[string, Data]
-  var prod = newProduction[Data](proc (v: Table[string, Data]) = vars = v)
-  prod.addCondition(Var(name: "b"), Attr(Color), Str("blue"))
-  prod.addCondition(Var(name: "y"), Attr(LeftOf), Var(name: "z"))
-  prod.addCondition(Var(name: "a"), Attr(Color), Str("maize"))
-  prod.addCondition(Var(name: "y"), Attr(RightOf), Var(name: "b"))
+  let prod =
+    rule(Data):
+      what:
+        (b, Attr(Color), Str("blue"))
+        (y, Attr(LeftOf), z)
+        (a, Attr(Color), Str("maize"))
+        (y, Attr(RightOf), b)
 
   var session = newSession[Data]()
   let prodNode = session.addProduction(prod)
@@ -120,12 +126,17 @@ test "removing facts":
   check prodNode.getParent.facts.len == 0
 
 test "updating facts":
-  var vars: Table[string, Data]
-  var prod = newProduction[Data](proc (v: Table[string, Data]) = vars = v)
-  prod.addCondition(Var(name: "b"), Attr(Color), Str("blue"))
-  prod.addCondition(Var(name: "y"), Attr(LeftOf), Var(name: "z"))
-  prod.addCondition(Var(name: "a"), Attr(Color), Str("maize"))
-  prod.addCondition(Var(name: "y"), Attr(RightOf), Var(name: "b"))
+  var zVal: Data
+
+  let prod =
+    rule(Data):
+      what:
+        (b, Attr(Color), Str("blue"))
+        (y, Attr(LeftOf), z)
+        (a, Attr(Color), Str("maize"))
+        (y, Attr(RightOf), b)
+      then:
+        zVal = z
 
   var session = newSession[Data]()
   let prodNode = session.addProduction(prod)
@@ -134,19 +145,20 @@ test "updating facts":
   session.addFact((Id(Alice), Attr(Color), Str("maize")))
   session.addFact((Id(Yair), Attr(RightOf), Id(Bob)))
   check prodNode.facts.len == 1
-  check vars["z"] == Id(Zach)
+  check zVal == Id(Zach)
 
   session.addFact((Id(Yair), Attr(LeftOf), Id(Xavier)))
   check prodNode.facts.len == 1
-  check vars["z"] == Id(Xavier)
+  check zVal == Id(Xavier)
 
 test "updating facts in different alpha nodes":
-  var vars: Table[string, Data]
-  var prod = newProduction[Data](proc (v: Table[string, Data]) = vars = v)
-  prod.addCondition(Var(name: "b"), Attr(Color), Str("blue"))
-  prod.addCondition(Var(name: "y"), Attr(LeftOf), Id(Zach))
-  prod.addCondition(Var(name: "a"), Attr(Color), Str("maize"))
-  prod.addCondition(Var(name: "y"), Attr(RightOf), Var(name: "b"))
+  let prod =
+    rule(Data):
+      what:
+        (b, Attr(Color), Str("blue"))
+        (y, Attr(LeftOf), Id(Zach))
+        (a, Attr(Color), Str("maize"))
+        (y, Attr(RightOf), b)
 
   var session = newSession[Data]()
   let prodNode = session.addProduction(prod)
