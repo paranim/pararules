@@ -172,12 +172,15 @@ test "updating facts in different alpha nodes":
   check prodNode.facts.len == 0
 
 test "complex conditions":
-  var vars: Table[string, Data]
-  var prod = newProduction[Data](proc (v: Table[string, Data]) = vars = v)
-  prod.addCondition(Var(name: "b"), Attr(Color), Str("blue"))
-  prod.addCondition(Var(name: "y"), Attr(LeftOf), Var(name: "z"), proc (v: Table[string, Data]): bool = v["z"] != Id(Zach))
-  prod.addCondition(Var(name: "a"), Attr(Color), Str("maize"))
-  prod.addCondition(Var(name: "y"), Attr(RightOf), Var(name: "b"))
+  let prod =
+    rule(Data):
+      what:
+        (b, Attr(Color), Str("blue"))
+        (y, Attr(LeftOf), z)
+        (a, Attr(Color), Str("maize"))
+        (y, Attr(RightOf), b)
+      cond:
+        z != Id(Zach)
 
   var session = newSession[Data]()
   let prodNode = session.addProduction(prod)

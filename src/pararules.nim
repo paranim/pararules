@@ -1,4 +1,4 @@
-import strformat, tables, algorithm, macros
+import strformat, tables, sets, algorithm, macros
 
 type
   # facts
@@ -274,37 +274,74 @@ proc wrapVar(node: NimNode): NimNode =
   else:
     node
 
-proc createLet(node: NimNode, paramNode: NimNode): NimNode =
-  var t: Table[string, NimNode]
-  for child in node:
-    expectKind(child, nnkPar)
-    for i in 0..2:
-      if child[i].kind == nnkIdent:
-        let s = child[i].strVal
-        if not t.hasKey(s):
-          t[s] = quote do:
-            `paramNode`[`s`]
+proc createLet(ids: Table[string, int], paramNode: NimNode): NimNode =
   result = newStmtList()
-  for (s, val) in t.pairs():
+  for s in ids.keys():
     result.add(newLetStmt(
       newIdentNode(s),
-      val
+      quote do:
+        `paramNode`[`s`]
     ))
 
-proc parseCond(prod: NimNode, node: NimNode): NimNode =
+proc getIdentsInNode(node: NimNode): HashSet[string] =
+  if node.kind == nnkIdent:
+    result.incl(node.strVal)
+  for child in node:
+    result = result.union(child.getIdentsInNode())
+
+proc parseCond(ids: Table[string, int], node: NimNode): Table[int, NimNode] =
+  expectKind(node, nnkStmtList)
+  for condNode in node:
+    var condNum = 0
+    for ident in condNode.getIdentsInNode():
+      if ids.hasKey(ident):
+        condNum = max(condNum, ids[ident])
+    if result.hasKey(condNum):
+      let prevcond = result[condNum]
+      result[condNum] = quote do:
+        `prevCond` and `condNode`
+    else:
+      result[condNum] = condNode
+
+proc addCond(dataType:NimNode, ids: Table[string, int], prod: NimNode, node: NimNode, filter: NimNode): NimNode =
   expectKind(node, nnkPar)
   let id = wrapVar(node[0])
   let attr = wrapVar(node[1])
   let value = wrapVar(node[2])
-  quote do:
-    addCondition(`prod`, `id`, `attr`, `value`)
+  if filter != nil:
+    let fn = genSym(nskLet, "fn")
+    let v = genSym(nskParam, "v")
+    let letNode = createLet(ids, v)
+    quote do:
+      let `fn` = proc (`v`: Table[string, `dataType`]): bool =
+        `letNode`
+        `filter`
+      addCondition(`prod`, `id`, `attr`, `value`, `fn`)
+  else:
+    quote do:
+      addCondition(`prod`, `id`, `attr`, `value`)
 
-proc parseWhat(dataType: NimNode, node: NimNode, thenNode: NimNode): NimNode =
+proc parseWhat(dataType: NimNode, node: NimNode, condNode: NimNode, thenNode: NimNode): NimNode =
+  var ids: Table[string, int]
+  for condNum in 0 ..< node.len:
+    let child = node[condNum]
+    expectKind(child, nnkPar)
+    for i in 0..2:
+      if child[i].kind == nnkIdent:
+        let s = child[i].strVal
+        if not ids.hasKey(s):
+          ids[s] = condNum
+
   expectKind(node, nnkStmtList)
+  var conds: Table[int, NimNode]
+  if condNode != nil:
+    conds = parseCond(ids, condNode)
+
   let prod = genSym(nskVar, "prod")
   let v = genSym(nskParam, "v")
+
   if thenNode != nil:
-    let letNode = createLet(node, v)
+    let letNode = createLet(ids, v)
     result = newStmtList(quote do:
       var `prod` = newProduction[`dataType`](proc (`v`: Table[string, `dataType`]) =
         `letNode`
@@ -316,8 +353,21 @@ proc parseWhat(dataType: NimNode, node: NimNode, thenNode: NimNode): NimNode =
       var `prod` = newProduction[`dataType`](proc (`v`: Table[string, `dataType`]) = discard
       )
     )
-  for child in node:
-    result.add parseCond(prod, child)
+
+  # we must clear the ids and add them again
+  # so addCond only gets the ids available to
+  # that condition
+  ids.clear()
+
+  for condNum in 0 ..< node.len:
+    let child = node[condNum]
+    expectKind(child, nnkPar)
+    for i in 0..2:
+      if child[i].kind == nnkIdent:
+        let s = child[i].strVal
+        if not ids.hasKey(s):
+          ids[s] = condNum
+    result.add addCond(datatype, ids, prod, child, if conds.hasKey(condNum): conds[condNum] else: nil)
   result.add prod
 
 macro rule*(dataType: type, body: untyped): untyped =
@@ -329,7 +379,12 @@ macro rule*(dataType: type, body: untyped): untyped =
     let id = child[0]
     expectKind(id, nnkIdent)
     t[id.strVal] = child[1]
-  result.add parseWhat(dataType, t["what"], if t.hasKey("then"): t["then"] else: nil)
+  result.add parseWhat(
+    dataType,
+    t["what"],
+    if t.hasKey("cond"): t["cond"] else: nil,
+    if t.hasKey("then"): t["then"] else: nil
+  )
 
 proc print(fact: Fact, indent: int): string
 proc print[T](node: JoinNode[T], indent: int): string
