@@ -40,6 +40,11 @@ proc parseCond(ids: Table[string, int], node: NimNode): Table[int, NimNode] =
     else:
       result[condNum] = condNode
 
+proc getUsedIds(ids: Table[string, int], node: NimNode): Table[string, int] =
+  for v in node.getVarsInNode:
+    if ids.hasKey(v):
+      result[v] = ids[v]
+
 proc addCond(dataType:NimNode, ids: Table[string, int], prod: NimNode, node: NimNode, filter: NimNode): NimNode =
   expectKind(node, nnkPar)
   let id = node[0].wrapVar
@@ -48,7 +53,8 @@ proc addCond(dataType:NimNode, ids: Table[string, int], prod: NimNode, node: Nim
   if filter != nil:
     let fn = genSym(nskLet, "fn")
     let v = genSym(nskParam, "v")
-    let letNode = createLet(ids, v)
+    let usedIds = getUsedIds(ids, filter)
+    let letNode = createLet(usedIds, v)
     quote do:
       let `fn` = proc (`v`: Table[string, `dataType`]): bool =
         `letNode`
@@ -78,7 +84,8 @@ proc parseWhat(dataType: NimNode, node: NimNode, condNode: NimNode, thenNode: Ni
   let v = genSym(nskParam, "v")
 
   if thenNode != nil:
-    let letNode = createLet(ids, v)
+    let usedIds = getUsedIds(ids, thenNode)
+    let letNode = createLet(usedIds, v)
     result = newStmtList(quote do:
       var `prod` = newProduction[`dataType`](proc (`v`: Table[string, `dataType`]) =
         `letNode`
@@ -91,19 +98,8 @@ proc parseWhat(dataType: NimNode, node: NimNode, condNode: NimNode, thenNode: Ni
       )
     )
 
-  # we must clear the ids and add them again
-  # so addCond only gets the ids available to
-  # that condition
-  ids.clear()
-
   for condNum in 0 ..< node.len:
     let child = node[condNum]
-    expectKind(child, nnkPar)
-    for i in 0..2:
-      if child[i].kind == nnkIdent:
-        let s = child[i].strVal
-        if not ids.hasKey(s):
-          ids[s] = condNum
     result.add addCond(datatype, ids, prod, child, if conds.hasKey(condNum): conds[condNum] else: nil)
   result.add prod
 
