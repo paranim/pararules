@@ -1,5 +1,5 @@
 import unittest
-import pararules
+import pararules, pararules/engine
 import tables
 import patty
 
