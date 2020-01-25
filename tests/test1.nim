@@ -42,8 +42,8 @@ test "number of conditions != number of facts":
   session.addFact((Id(Thomas), Attr(Height), Int(72)))
   session.addFact((Id(George), Attr(Height), Int(72)))
 
-  check prodNode.vars.len == 3
-  check prodNode.vars[0].len == 6
+  check prodNode.debugFacts.len == 3
+  check prodNode.debugFacts[0].len == 5
 
 test "adding facts out of order":
   let prod =
@@ -80,8 +80,8 @@ test "adding facts out of order":
 
   session.addFact((Id(David), Attr(Color), Str("white")))
 
-  check prodNode.vars.len == 1
-  check prodNode.vars[0].len == 8
+  check prodNode.debugFacts.len == 1
+  check prodNode.debugFacts[0].len == 10
 
 test "duplicate facts":
   let prod =
@@ -96,8 +96,8 @@ test "duplicate facts":
   session.addFact((Id(Bob), Attr(Self), Id(Bob)))
   session.addFact((Id(Bob), Attr(Color), Str("red")))
 
-  check prodNode.vars.len == 1
-  check prodNode.vars[0].len == 2
+  check prodNode.debugFacts.len == 1
+  check prodNode.debugFacts[0].len == 3
 
 test "removing facts":
   let prod =
@@ -114,16 +114,16 @@ test "removing facts":
   session.addFact((Id(Yair), Attr(LeftOf), Id(Zach)))
   session.addFact((Id(Alice), Attr(Color), Str("maize")))
   session.addFact((Id(Yair), Attr(RightOf), Id(Bob)))
-  check prodNode.vars.len == 1
+  check prodNode.debugFacts.len == 1
 
   session.removeFact((Id(Yair), Attr(RightOf), Id(Bob)))
-  check prodNode.vars.len == 0
-  check prodNode.getParent.vars.len == 1
-  check prodNode.getParent.vars[0].len == 4
+  check prodNode.debugFacts.len == 0
+  check prodNode.getParent.debugFacts.len == 1
+  check prodNode.getParent.debugFacts[0].len == 3
 
   session.removeFact((Id(Bob), Attr(Color), Str("blue")))
-  check prodNode.vars.len == 0
-  check prodNode.getParent.vars.len == 0
+  check prodNode.debugFacts.len == 0
+  check prodNode.getParent.debugFacts.len == 0
 
 test "updating facts":
   var zVal: Data
@@ -144,11 +144,11 @@ test "updating facts":
   session.addFact((Id(Yair), Attr(LeftOf), Id(Zach)))
   session.addFact((Id(Alice), Attr(Color), Str("maize")))
   session.addFact((Id(Yair), Attr(RightOf), Id(Bob)))
-  check prodNode.vars.len == 1
+  check prodNode.debugFacts.len == 1
   check zVal == Id(Zach)
 
   session.addFact((Id(Yair), Attr(LeftOf), Id(Xavier)))
-  check prodNode.vars.len == 1
+  check prodNode.debugFacts.len == 1
   check zVal == Id(Xavier)
 
 test "updating facts in different alpha nodes":
@@ -166,10 +166,10 @@ test "updating facts in different alpha nodes":
   session.addFact((Id(Yair), Attr(LeftOf), Id(Zach)))
   session.addFact((Id(Alice), Attr(Color), Str("maize")))
   session.addFact((Id(Yair), Attr(RightOf), Id(Bob)))
-  check prodNode.vars.len == 1
+  check prodNode.debugFacts.len == 1
 
   session.addFact((Id(Yair), Attr(LeftOf), Id(Xavier)))
-  check prodNode.vars.len == 0
+  check prodNode.debugFacts.len == 0
 
 test "complex conditions":
   let prod =
@@ -188,8 +188,8 @@ test "complex conditions":
   session.addFact((Id(Yair), Attr(LeftOf), Id(Zach)))
   session.addFact((Id(Alice), Attr(Color), Str("maize")))
   session.addFact((Id(Yair), Attr(RightOf), Id(Bob)))
-  check prodNode.vars.len == 0
+  check prodNode.debugFacts.len == 0
 
   session.addFact((Id(Yair), Attr(LeftOf), Id(Charlie)))
-  check prodNode.vars.len == 1
+  check prodNode.debugFacts.len == 1
 

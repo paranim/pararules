@@ -26,13 +26,15 @@ type
   MemoryNode[T] = ref object
     parent: JoinNode[T]
     children: seq[JoinNode[T]]
-    vars*: seq[Vars[T]]
+    vars: seq[Vars[T]]
     condition: Condition[T]
     case nodeType: MemoryNodeType
       of Full:
         callback: CallbackFn[T]
       else:
         nil
+    when not defined(release):
+      debugFacts*: seq[seq[Fact[T]]]
   JoinNode[T] = ref object
     parent: MemoryNode[T]
     children: seq[MemoryNode[T]]
@@ -149,41 +151,55 @@ proc performJoinTests(node: JoinNode, vars: Vars, alphaFact: Fact): bool =
       return false
   true
 
-proc leftActivation[T](node: MemoryNode[T], vars: Vars[T], token: Token[T])
+proc leftActivation[T](node: MemoryNode[T], vars: Vars[T], debugFacts: seq[Fact[T]], token: Token[T])
 
-proc leftActivation[T](node: JoinNode[T], vars: Vars[T], insert: bool) =
+proc leftActivation[T](node: JoinNode[T], vars: Vars[T], debugFacts: seq[Fact[T]], insert: bool) =
   for alphaFact in node.alphaNode.facts.values:
     if performJoinTests(node, vars, alphaFact):
       for child in node.children:
-        child.leftActivation(vars, (alphaFact, insert))
+        child.leftActivation(vars, debugFacts, (alphaFact, insert))
 
-proc leftActivation[T](node: MemoryNode[T], vars: Vars[T], token: Token[T]) =
+proc leftActivation[T](node: MemoryNode[T], vars: Vars[T], debugFacts: seq[Fact[T]], token: Token[T]) =
   var newVars = vars
   let success = newVars.getVarsFromFact(node.condition, token.fact)
   assert success
 
+  when not defined(release):
+    var debugFacts = debugFacts
+    debugFacts.add(token.fact)
+
   if token.insert:
     node.vars.add(newVars)
+    when not defined(release):
+      node.debugFacts.add(debugFacts)
   else:
     let index = node.vars.find(newVars)
     assert index >= 0
     node.vars.delete(index)
+    when not defined(release):
+      node.debugFacts.delete(index)
 
   if node.nodeType == Full and token.insert:
     node.callback(newVars)
   else:
     for child in node.children:
-      child.leftActivation(newVars, token.insert)
+      child.leftActivation(newVars, debugFacts, token.insert)
 
 proc rightActivation[T](node: JoinNode[T], token: Token[T]) =
   if node.parent.nodeType == Root:
     for child in node.children:
-      child.leftActivation(initTable[string, T](), token)
+      child.leftActivation(initTable[string, T](), newSeq[Fact[T]](), token)
   else:
-    for vars in node.parent.vars:
+    for i in 0 ..< node.parent.vars.len:
+      let vars = node.parent.vars[i]
+      let debugFacts =
+        when not defined(release):
+          node.parent.debugFacts[i]
+        else:
+          newSeq[Fact[T]]()
       if performJoinTests(node, vars, token.fact):
         for child in node.children:
-          child.leftActivation(vars, token)
+          child.leftActivation(vars, debugFacts, token)
 
 proc rightActivation[T](node: AlphaNode[T], token: Token[T]) =
   let id = token.fact.id.idVal.ord
