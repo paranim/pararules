@@ -21,16 +21,11 @@ type
     successors: seq[JoinNode[T]]
     children: seq[AlphaNode[T]]
   # beta network
-  TestAtJoinNode = object
-    alphaField: Field
-    betaField: Field
-    condition: int
   MemoryNodeType = enum
     Root, Partial, Full
   MemoryNode[T] = ref object
     parent: JoinNode[T]
     children: seq[JoinNode[T]]
-    facts*: seq[seq[Fact[T]]]
     vars*: seq[Vars[T]]
     condition: Condition[T]
     case nodeType: MemoryNodeType
@@ -42,7 +37,6 @@ type
     parent: MemoryNode[T]
     children: seq[MemoryNode[T]]
     alphaNode: AlphaNode[T]
-    tests: seq[TestAtJoinNode]
     condition: Condition[T]
   # session
   Condition[T] = object
@@ -109,18 +103,12 @@ proc isAncestor(x, y: JoinNode): bool =
   false
 
 proc addProduction*[T](session: Session[T], production: Production[T]): MemoryNode[T] =
-  var joins: Table[string, (Var, int)]
   result = session.betaNode
   let last = production.conditions.len - 1
   for i in 0 .. last:
     var condition = production.conditions[i]
     var leafNode = session.addNodes(condition.nodes)
     var joinNode = JoinNode[T](parent: result, alphaNode: leafNode, condition: condition)
-    for v in condition.vars:
-      if joins.hasKey(v.name):
-        let (joinVar, condNum) = joins[v.name]
-        joinNode.tests.add(TestAtJoinNode(alphaField: v.field, betaField: joinVar.field, condition: condNum))
-      joins[v.name] = (v, i)
     result.children.add(joinNode)
     leafNode.successors.add(joinNode)
     # successors must be sorted by ancestry (descendents first) to avoid duplicate rule firings
@@ -132,88 +120,70 @@ proc addProduction*[T](session: Session[T], production: Production[T]): MemoryNo
     joinNode.children.add(newMemNode)
     result = newMemNode
 
-proc getVarsFromFact[T](vars: var Vars[T], condition: Condition[T], fact: Fact[T]) =
+proc getVarsFromFact[T](vars: var Vars[T], condition: Condition[T], fact: Fact[T]): bool =
   for v in condition.vars:
     case v.field:
       of Identifier:
-        if vars.hasKey(v.name):
-          assert vars[v.name] == fact[0]
+        if vars.hasKey(v.name) and vars[v.name] != fact[0]:
+          return false
         else:
           vars[v.name] = fact[0]
       of Attribute:
-        if vars.hasKey(v.name):
-          assert vars[v.name] == fact[1]
+        if vars.hasKey(v.name) and vars[v.name] != fact[1]:
+          return false
         else:
           vars[v.name] = fact[1]
       of Value:
-        if vars.hasKey(v.name):
-          assert vars[v.name] == fact[2]
+        if vars.hasKey(v.name) and vars[v.name] != fact[2]:
+          return false
         else:
           vars[v.name] = fact[2]
+  true
 
-proc performJoinTest(test: TestAtJoinNode, alphaFact: Fact, betaFact: Fact): bool =
-  let arg1 = case test.alphaField:
-    of Field.Identifier: alphaFact[0]
-    of Field.Attribute: alphaFact[1]
-    of Field.Value: alphaFact[2]
-  let arg2 = case test.betaField:
-    of Field.Identifier: betaFact[0]
-    of Field.Attribute: betaFact[1]
-    of Field.Value: betaFact[2]
-  arg1 == arg2
-
-proc performJoinTests(node: JoinNode, facts: seq[Fact], vars: Vars, alphaFact: Fact): bool =
-  for test in node.tests:
-    let betaFact = facts[test.condition]
-    if not performJoinTest(test, alphaFact, betaFact):
-      return false
+proc performJoinTests(node: JoinNode, vars: Vars, alphaFact: Fact): bool =
+  var newVars = vars
+  if not newVars.getVarsFromFact(node.condition, alphaFact):
+    return false
   if node.condition.filter != nil:
-    var newVars = vars
-    newVars.getVarsFromFact(node.condition, alphaFact)
     if not node.condition.filter(newVars):
       return false
   true
 
-proc leftActivation[T](node: MemoryNode[T], facts: seq[Fact[T]], vars: Vars[T], token: Token[T])
+proc leftActivation[T](node: MemoryNode[T], vars: Vars[T], token: Token[T])
 
-proc leftActivation[T](node: JoinNode[T], facts: seq[Fact[T]], vars: Vars[T], insert: bool) =
+proc leftActivation[T](node: JoinNode[T], vars: Vars[T], insert: bool) =
   for alphaFact in node.alphaNode.facts.values:
-    if performJoinTests(node, facts, vars, alphaFact):
+    if performJoinTests(node, vars, alphaFact):
       for child in node.children:
-        child.leftActivation(facts, vars, (alphaFact, insert))
+        child.leftActivation(vars, (alphaFact, insert))
 
-proc leftActivation[T](node: MemoryNode[T], facts: seq[Fact[T]], vars: Vars[T], token: Token[T]) =
-  var newFacts = facts
-  newFacts.add(token.fact)
+proc leftActivation[T](node: MemoryNode[T], vars: Vars[T], token: Token[T]) =
   var newVars = vars
-  newVars.getVarsFromFact(node.condition, token.fact)
+  let success = newVars.getVarsFromFact(node.condition, token.fact)
+  assert success
 
   if token.insert:
-    node.facts.add(newFacts)
     node.vars.add(newVars)
   else:
-    let index = node.facts.find(newFacts)
+    let index = node.vars.find(newVars)
     assert index >= 0
-    node.facts.delete(index)
     node.vars.delete(index)
 
   if node.nodeType == Full and token.insert:
     node.callback(newVars)
   else:
     for child in node.children:
-      child.leftActivation(newFacts, newVars, token.insert)
+      child.leftActivation(newVars, token.insert)
 
 proc rightActivation[T](node: JoinNode[T], token: Token[T]) =
   if node.parent.nodeType == Root:
     for child in node.children:
-      child.leftActivation(@[], initTable[string, T](), token)
+      child.leftActivation(initTable[string, T](), token)
   else:
-    for i in 0 ..< node.parent.facts.len:
-      let facts = node.parent.facts[i]
-      let vars = node.parent.vars[i]
-      if performJoinTests(node, facts, vars, token.fact):
+    for vars in node.parent.vars:
+      if performJoinTests(node, vars, token.fact):
         for child in node.children:
-          child.leftActivation(facts, vars, token)
+          child.leftActivation(vars, token)
 
 proc rightActivation[T](node: AlphaNode[T], token: Token[T]) =
   let id = token.fact.id.idVal.ord
@@ -279,7 +249,7 @@ proc print[T](node: JoinNode[T], indent: int): string =
 proc print[T](node: MemoryNode[T], indent: int): string =
   for i in 0 ..< indent:
     result &= "  "
-  let cnt = node.facts.len
+  let cnt = node.vars.len
   if node.nodeType == Full:
     result &= "ProdNode ({cnt})\n".fmt
   else:
