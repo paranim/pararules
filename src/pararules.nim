@@ -1,4 +1,4 @@
-import strformat, tables, sets, algorithm, macros
+import strformat, tables, sets, algorithm, macros, strutils
 
 type
   # facts
@@ -266,8 +266,11 @@ proc newSession*[T](): Session[T] =
 proc newProduction*[T](cb: CallbackFn[T]): Production[T] =
   result.callback = cb
 
+proc isVar(node: NimNode): bool =
+  node.kind == nnkIdent and node.strVal[0].isLowerAscii
+
 proc wrapVar(node: NimNode): NimNode =
-  if node.kind == nnkIdent:
+  if node.isVar:
     let s = node.strVal
     quote do:
       Var(name: `s`)
@@ -283,17 +286,17 @@ proc createLet(ids: Table[string, int], paramNode: NimNode): NimNode =
         `paramNode`[`s`]
     ))
 
-proc getIdentsInNode(node: NimNode): HashSet[string] =
-  if node.kind == nnkIdent:
+proc getVarsInNode(node: NimNode): HashSet[string] =
+  if node.isVar:
     result.incl(node.strVal)
   for child in node:
-    result = result.union(child.getIdentsInNode())
+    result = result.union(child.getVarsInNode())
 
 proc parseCond(ids: Table[string, int], node: NimNode): Table[int, NimNode] =
   expectKind(node, nnkStmtList)
   for condNode in node:
     var condNum = 0
-    for ident in condNode.getIdentsInNode():
+    for ident in condNode.getVarsInNode():
       if ids.hasKey(ident):
         condNum = max(condNum, ids[ident])
     if result.hasKey(condNum):
