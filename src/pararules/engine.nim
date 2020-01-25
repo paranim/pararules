@@ -7,6 +7,12 @@ type
   Fact[T] = tuple[id: T, attr: T, value: T]
   Token[T] = tuple[fact: Fact[T], insert: bool]
   IdAttr = tuple[id: int, attr: int]
+  Vars[T] = Table[string, T]
+  Var* = object
+    name*: string
+    field: Field
+  CallbackFn[T] = proc (vars: Vars[T])
+  FilterFn[T] = proc (vars: Vars[T]): bool
   # alpha network
   AlphaNode[T] = ref object
     testField: Field
@@ -25,30 +31,20 @@ type
     parent: JoinNode[T]
     children: seq[JoinNode[T]]
     facts*: seq[seq[Fact[T]]]
+    vars*: seq[Vars[T]]
+    condition: Condition[T]
     case nodeType: MemoryNodeType
       of Full:
-        production: Production[T]
+        callback: CallbackFn[T]
       else:
         nil
-  JoinNodeType = enum
-    Join, JoinAndFilter
   JoinNode[T] = ref object
     parent: MemoryNode[T]
     children: seq[MemoryNode[T]]
     alphaNode: AlphaNode[T]
     tests: seq[TestAtJoinNode]
-    case nodeType: JoinNodeType
-      of Join:
-        nil
-      of JoinAndFilter:
-        production: Production[T]
+    condition: Condition[T]
   # session
-  Vars[T] = Table[string, T]
-  Var* = object
-    name*: string
-    field: Field
-  CallbackFn[T] = proc (vars: Vars[T])
-  FilterFn[T] = proc (vars: Vars[T]): bool
   Condition[T] = object
     nodes: seq[AlphaNode[T]]
     vars: seq[Var]
@@ -119,9 +115,7 @@ proc addProduction*[T](session: Session[T], production: Production[T]): MemoryNo
   for i in 0 .. last:
     var condition = production.conditions[i]
     var leafNode = session.addNodes(condition.nodes)
-    var joinNode = JoinNode[T](parent: result, alphaNode: leafNode, nodeType: if condition.filter != nil: JoinAndFilter else: Join)
-    if joinNode.nodeType == JoinAndFilter:
-      joinNode.production = production
+    var joinNode = JoinNode[T](parent: result, alphaNode: leafNode, condition: condition)
     for v in condition.vars:
       if joins.hasKey(v.name):
         let (joinVar, condNum) = joins[v.name]
@@ -132,33 +126,30 @@ proc addProduction*[T](session: Session[T], production: Production[T]): MemoryNo
     # successors must be sorted by ancestry (descendents first) to avoid duplicate rule firings
     leafNode.successors.sort(proc (x, y: JoinNode[T]): int =
       if isAncestor(x, y): 1 else: -1)
-    var newMemNode = MemoryNode[T](parent: joinNode, nodeType: if i == last: Full else: Partial)
+    var newMemNode = MemoryNode[T](parent: joinNode, nodeType: if i == last: Full else: Partial, condition: condition)
     if newMemNode.nodeType == Full:
-      newMemNode.production = production
+      newMemNode.callback = production.callback
     joinNode.children.add(newMemNode)
     result = newMemNode
 
-proc getVarsFromFacts[T](conditions: seq[Condition[T]], facts: seq[Fact[T]]): Vars[T] =
-  var vars: Vars[T]
-  for i in 0 ..< facts.len:
-    for v in conditions[i].vars:
-      case v.field:
-        of Identifier:
-          if vars.hasKey(v.name):
-            assert vars[v.name] == facts[i][0]
-          else:
-            vars[v.name] = facts[i][0]
-        of Attribute:
-          if vars.hasKey(v.name):
-            assert vars[v.name] == facts[i][1]
-          else:
-            vars[v.name] = facts[i][1]
-        of Value:
-          if vars.hasKey(v.name):
-            assert vars[v.name] == facts[i][2]
-          else:
-            vars[v.name] = facts[i][2]
-  vars
+proc getVarsFromFact[T](vars: var Vars[T], condition: Condition[T], fact: Fact[T]) =
+  for v in condition.vars:
+    case v.field:
+      of Identifier:
+        if vars.hasKey(v.name):
+          assert vars[v.name] == fact[0]
+        else:
+          vars[v.name] = fact[0]
+      of Attribute:
+        if vars.hasKey(v.name):
+          assert vars[v.name] == fact[1]
+        else:
+          vars[v.name] = fact[1]
+      of Value:
+        if vars.hasKey(v.name):
+          assert vars[v.name] == fact[2]
+        else:
+          vars[v.name] = fact[2]
 
 proc performJoinTest(test: TestAtJoinNode, alphaFact: Fact, betaFact: Fact): bool =
   let arg1 = case test.alphaField:
@@ -171,57 +162,58 @@ proc performJoinTest(test: TestAtJoinNode, alphaFact: Fact, betaFact: Fact): boo
     of Field.Value: betaFact[2]
   arg1 == arg2
 
-proc performJoinTests(node: JoinNode, facts: seq[Fact], alphaFact: Fact): bool =
+proc performJoinTests(node: JoinNode, facts: seq[Fact], vars: Vars, alphaFact: Fact): bool =
   for test in node.tests:
     let betaFact = facts[test.condition]
     if not performJoinTest(test, alphaFact, betaFact):
       return false
-  if node.nodeType == JoinAndFilter:
-    var newFacts = facts
-    newFacts.add(alphaFact)
-    let vars = getVarsFromFacts(node.production.conditions, newFacts)
-    let index = facts.len
-    let filter = node.production.conditions[index].filter
-    if not filter(vars):
+  if node.condition.filter != nil:
+    var newVars = vars
+    newVars.getVarsFromFact(node.condition, alphaFact)
+    if not node.condition.filter(newVars):
       return false
   true
 
-proc leftActivation[T](node: MemoryNode[T], facts: seq[Fact[T]], token: Token[T])
+proc leftActivation[T](node: MemoryNode[T], facts: seq[Fact[T]], vars: Vars[T], token: Token[T])
 
-proc leftActivation[T](node: JoinNode[T], facts: seq[Fact[T]], insert: bool) =
+proc leftActivation[T](node: JoinNode[T], facts: seq[Fact[T]], vars: Vars[T], insert: bool) =
   for alphaFact in node.alphaNode.facts.values:
-    if performJoinTests(node, facts, alphaFact):
+    if performJoinTests(node, facts, vars, alphaFact):
       for child in node.children:
-        child.leftActivation(facts, (alphaFact, insert))
+        child.leftActivation(facts, vars, (alphaFact, insert))
 
-proc leftActivation[T](node: MemoryNode[T], facts: seq[Fact[T]], token: Token[T]) =
+proc leftActivation[T](node: MemoryNode[T], facts: seq[Fact[T]], vars: Vars[T], token: Token[T]) =
   var newFacts = facts
   newFacts.add(token.fact)
+  var newVars = vars
+  newVars.getVarsFromFact(node.condition, token.fact)
 
   if token.insert:
     node.facts.add(newFacts)
+    node.vars.add(newVars)
   else:
     let index = node.facts.find(newFacts)
     assert index >= 0
     node.facts.delete(index)
+    node.vars.delete(index)
 
   if node.nodeType == Full and token.insert:
-    assert node.production.conditions.len == newFacts.len
-    let vars = getVarsFromFacts(node.production.conditions, newFacts)
-    node.production.callback(vars)
+    node.callback(newVars)
   else:
     for child in node.children:
-      child.leftActivation(newFacts, token.insert)
+      child.leftActivation(newFacts, newVars, token.insert)
 
 proc rightActivation[T](node: JoinNode[T], token: Token[T]) =
   if node.parent.nodeType == Root:
     for child in node.children:
-      child.leftActivation(@[], token)
+      child.leftActivation(@[], initTable[string, T](), token)
   else:
-    for facts in node.parent.facts:
-      if performJoinTests(node, facts, token.fact):
+    for i in 0 ..< node.parent.facts.len:
+      let facts = node.parent.facts[i]
+      let vars = node.parent.vars[i]
+      if performJoinTests(node, facts, vars, token.fact):
         for child in node.children:
-          child.leftActivation(facts, token)
+          child.leftActivation(facts, vars, token)
 
 proc rightActivation[T](node: AlphaNode[T], token: Token[T]) =
   let id = token.fact.id.idVal.ord
