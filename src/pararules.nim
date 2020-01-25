@@ -13,7 +13,7 @@ proc wrapVar(node: NimNode): NimNode =
 
 proc createLet(ids: Table[string, int], paramNode: NimNode): NimNode =
   result = newStmtList()
-  for s in ids.keys():
+  for s in ids.keys:
     result.add(newLetStmt(
       newIdentNode(s),
       quote do:
@@ -24,17 +24,17 @@ proc getVarsInNode(node: NimNode): HashSet[string] =
   if node.isVar:
     result.incl(node.strVal)
   for child in node:
-    result = result.union(child.getVarsInNode())
+    result = result.union(child.getVarsInNode)
 
 proc parseCond(ids: Table[string, int], node: NimNode): Table[int, NimNode] =
   expectKind(node, nnkStmtList)
   for condNode in node:
     var condNum = 0
-    for ident in condNode.getVarsInNode():
+    for ident in condNode.getVarsInNode:
       if ids.hasKey(ident):
         condNum = max(condNum, ids[ident])
     if result.hasKey(condNum):
-      let prevcond = result[condNum]
+      let prevCond = result[condNum]
       result[condNum] = quote do:
         `prevCond` and `condNode`
     else:
@@ -42,9 +42,9 @@ proc parseCond(ids: Table[string, int], node: NimNode): Table[int, NimNode] =
 
 proc addCond(dataType:NimNode, ids: Table[string, int], prod: NimNode, node: NimNode, filter: NimNode): NimNode =
   expectKind(node, nnkPar)
-  let id = wrapVar(node[0])
-  let attr = wrapVar(node[1])
-  let value = wrapVar(node[2])
+  let id = node[0].wrapVar
+  let attr = node[1].wrapVar
+  let value = node[2].wrapVar
   if filter != nil:
     let fn = genSym(nskLet, "fn")
     let v = genSym(nskParam, "v")
