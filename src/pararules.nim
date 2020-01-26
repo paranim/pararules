@@ -14,11 +14,11 @@ proc wrap(node: NimNode, dataType: NimNode, field: Field): NimNode =
   else:
     case field:
       of Identifier:
-        let enumChoice = newDotExpr(enumName, ident(dataType.strVal & "Id"))
-        quote do: `dataType`(kind: `enumChoice`, id: `node`)
+        let enumChoice = newDotExpr(enumName, ident(dataType.strVal & "Type0"))
+        quote do: `dataType`(kind: `enumChoice`, type0: `node`)
       of Attribute:
-        let enumChoice = newDotExpr(enumName, ident(dataType.strVal & "Attr"))
-        quote do: `dataType`(kind: `enumChoice`, attr: `node`)
+        let enumChoice = newDotExpr(enumName, ident(dataType.strVal & "Type1"))
+        quote do: `dataType`(kind: `enumChoice`, type1: `node`)
       of Value:
         let newProc = ident(newPrefix & dataType.strVal)
         quote do: `newProc`(`node`)
@@ -131,38 +131,28 @@ macro rule*(dataType: type, body: untyped): untyped =
     if t.hasKey("then"): t["then"] else: nil
   )
 
-proc parseSchemaPair(pair: NimNode): tuple[key: string, val: string] =
-  expectKind(pair, nnkCall)
-  let key = pair[0]
-  expectKind(key, nnkIdent)
-  var val = pair[1]
-  expectKind(val, nnkStmtList)
-  val = val[0]
-  expectKind(val, nnkIdent)
-  (key.strVal, val.strVal)
-
-proc createBranch(dataType: NimNode, key: string, val: string): NimNode =
+proc createBranch(dataType: NimNode, index: int, typ: NimNode): NimNode =
   result = newNimNode(nnkOfBranch)
   var list = newNimNode(nnkRecList)
-  list.add(newIdentDefs(ident(key), ident(val)))
-  result.add(ident(dataType.strVal & key.capitalizeAscii), list)
+  list.add(newIdentDefs(ident("type" & $index), typ))
+  result.add(ident(dataType.strVal & "Type" & $index), list)
 
-proc createEnum(name: NimNode, dataType: NimNode, pairs: Table[string, string]): NimNode =
+proc createEnum(name: NimNode, dataType: NimNode, types: seq[NimNode]): NimNode =
   result = newNimNode(nnkTypeDef).add(
     newNimNode(nnkPragmaExpr).add(name).add(
       newNimNode(nnkPragma).add(ident("pure"))),
     newEmptyNode())
   var choices = newNimNode(nnkEnumTy).add(newEmptyNode())
-  for name in pairs.keys():
-    choices.add(ident(dataType.strVal & name.capitalizeAscii))
+  for i in 0 ..< types.len:
+    choices.add(ident(dataType.strVal & "Type" & $i))
   result.add(choices)
 
-proc createTypes(dataType: NimNode, enumName: NimNode, schemaPairs: Table[string, string]): NimNode =
-  let enumType = createEnum(postfix(enumName, "*"), dataType, schemaPairs)
+proc createTypes(dataType: NimNode, enumName: NimNode, types: seq[NimNode]): NimNode =
+  let enumType = createEnum(postfix(enumName, "*"), dataType, types)
   var cases = newNimNode(nnkRecCase)
   cases.add(newIdentDefs(postfix(ident("kind"), "*"), enumName))
-  for (key, val) in schemaPairs.pairs():
-    cases.add(createBranch(dataType, key, val))
+  for i in 0 ..< types.len:
+    cases.add(createBranch(dataType, i, types[i]))
 
   result = newNimNode(nnkTypeSection)
   result.add(enumType)
@@ -176,17 +166,17 @@ proc createTypes(dataType: NimNode, enumName: NimNode, schemaPairs: Table[string
     )
   ))
 
-proc createEqBranch(dataType: NimNode, key: string): NimNode =
-  let keyNode = ident(key)
+proc createEqBranch(dataType: NimNode, index: int): NimNode =
+  let keyNode = ident("type" & $index)
   result = newNimNode(nnkOfBranch)
   let eq = infix(newDotExpr(ident("a"), keyNode), "==", newDotExpr(ident("b"), keyNode))
   let list = newStmtList(newNimNode(nnkReturnStmt).add(eq))
-  result.add(ident(dataType.strVal & key.capitalizeAscii), list)
+  result.add(ident(dataType.strVal & "Type" & $index), list)
 
-proc createEqProc(dataType: NimNode, schemaPairs: Table[string, string]): NimNode =
+proc createEqProc(dataType: NimNode, types: seq[NimNode]): NimNode =
   var cases = newNimNode(nnkCaseStmt).add(newDotExpr(ident("a"), ident("kind")))
-  for key in schemaPairs.keys():
-    cases.add(createEqBranch(dataType, key))
+  for i in 0 ..< types.len:
+    cases.add(createEqBranch(dataType, i))
 
   let body = quote do:
     if a.kind == b.kind:
@@ -204,9 +194,9 @@ proc createEqProc(dataType: NimNode, schemaPairs: Table[string, string]): NimNod
     body = newStmtList(body)
   )
 
-proc createNewProc(dataType: NimNode, enumName: NimNode, key: string, val: string): NimNode =
-  let enumChoice = newDotExpr(enumName, ident(dataType.strVal & key.capitalizeAscii))
-  let id = ident(key)
+proc createNewProc(dataType: NimNode, enumName: NimNode, index: int, typ: NimNode): NimNode =
+  let enumChoice = newDotExpr(enumName, ident(dataType.strVal & "Type" & $index))
+  let id = ident("type" & $index)
   let x = ident("x")
   let body = quote do:
     `dataType`(kind: `enumChoice`, `id`: `x`)
@@ -215,28 +205,30 @@ proc createNewProc(dataType: NimNode, enumName: NimNode, key: string, val: strin
     name = postfix(ident(newPrefix & dataType.strVal), "*"),
     params = [
       dataType,
-      newIdentDefs(x, ident(val))
+      newIdentDefs(x, typ)
     ],
     body = newStmtList(body)
   )
 
-proc createNewProcs(dataType: NimNode, enumName: NimNode, schemaPairs: Table[string, string]): NimNode =
+proc createNewProcs(dataType: NimNode, enumName: NimNode, types: seq[NimNode]): NimNode =
   result = newStmtList()
-  for (key, val) in schemaPairs.pairs():
-    result.add(createNewProc(dataType, enumName, key, val))
+  for i in 0 ..< types.len:
+    result.add(createNewProc(dataType, enumName, i, types[i]))
 
-macro schema*(dataType: untyped, body: untyped): untyped =
-  expectKind(body, nnkStmtList)
-  var schemaPairs: Table[string, string]
-  for child in body:
-    let (key, val) = parseSchemaPair(child)
-    assert not schemaPairs.hasKey(key)
-    schemaPairs[key] = val
+macro schema*(body: untyped): untyped =
+  expectKind(body, nnkCall)
+  var types: seq[NimNode]
+  for i in 1 ..< body.len:
+    let typ = body[i]
+    expectKind(typ, nnkIdent)
+    assert not (typ in types)
+    types.add(typ)
 
+  let dataType = body[0]
   expectKind(dataType, nnkIdent)
   let enumName = ident(dataType.strVal & enumSuffix)
   newStmtList(
-    createTypes(dataType, enumName, schemaPairs),
-    createEqProc(dataType, schemaPairs),
-    createNewProcs(dataType, enumName, schemaPairs)
+    createTypes(dataType, enumName, types),
+    createEqProc(dataType, types),
+    createNewProcs(dataType, enumName, types)
   )

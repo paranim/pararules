@@ -9,11 +9,7 @@ type
   Attr = enum
     Color, LeftOf, RightOf, Height, On, Self
 
-schema Data:
-  id: Id
-  attr: Attr
-  string: string
-  int: int
+schema Data(Id, Attr, string, int)
 
 test "number of conditions != number of facts":
   let prod =

@@ -202,8 +202,8 @@ proc rightActivation[T](node: JoinNode[T], token: Token[T]) =
           child.leftActivation(vars, debugFacts, token)
 
 proc rightActivation[T](node: AlphaNode[T], token: Token[T]) =
-  let id = token.fact.id.id.ord
-  let attr = token.fact.attr.attr.ord
+  let id = token.fact.id.type0.ord
+  let attr = token.fact.attr.type1.ord
   if token.insert:
     node.facts[(id, attr)] = token.fact
   else:
@@ -226,8 +226,8 @@ proc addFact(node: AlphaNode, fact: Fact, root: bool, insert: bool): bool =
   true
 
 proc addFact*[T](session: var Session[T], fact: Fact[T]) =
-  let id = fact.id.id.ord
-  let attr = fact.attr.attr.ord
+  let id = fact.id.type0.ord
+  let attr = fact.attr.type1.ord
   let idAttr = (id, attr)
   if session.allFacts.hasKey(idAttr):
     session.removeFact(session.allFacts[idAttr])
