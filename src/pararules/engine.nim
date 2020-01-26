@@ -70,7 +70,7 @@ proc addNodes(session: Session, nodes: seq[AlphaNode]): AlphaNode =
   for node in nodes:
     result = result.addNode(node)
 
-proc addCondition*[T](production: var Production[T], id: Var or T, attr: Var or T, value: Var or T, filter: FilterFn[T] = nil) =
+proc add*[T](production: var Production[T], id: Var or T, attr: Var or T, value: Var or T, filter: FilterFn[T] = nil) =
   var condition = Condition[T](filter: filter)
   for fieldType in [Field.Identifier, Field.Attribute, Field.Value]:
     case fieldType:

@@ -71,10 +71,10 @@ proc addCond(dataType:NimNode, ids: Table[string, int], prod: NimNode, node: Nim
       let `fn` = proc (`v`: Table[string, `dataType`]): bool =
         `letNode`
         `filter`
-      addCondition(`prod`, `id`, `attr`, `value`, `fn`)
+      add(`prod`, `id`, `attr`, `value`, `fn`)
   else:
     quote do:
-      addCondition(`prod`, `id`, `attr`, `value`)
+      add(`prod`, `id`, `attr`, `value`)
 
 proc parseWhat(name: string, dataType: NimNode, node: NimNode, condNode: NimNode, thenNode: NimNode): NimNode =
   var ids: Table[string, int]
