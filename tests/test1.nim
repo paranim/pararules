@@ -1,7 +1,6 @@
 import unittest
 import pararules, pararules/engine
 import tables
-import patty
 
 type
   Person = enum
@@ -10,11 +9,23 @@ type
   Property = enum
     Color, LeftOf, RightOf, Height, On, Self
 
-variant Data:
-  Id(idVal: Person)
-  Attr(attrVal: Property)
-  Str(strVal: string)
-  Int(intVal: int)
+schema Data:
+  id: Person
+  attr: Property
+  string: string
+  int: int
+
+proc Id(x: Person): Data =
+  Data(kind: DataKind.Id, id: x)
+
+proc Attr(x: Property): Data =
+  Data(kind: DataKind.Attr, attr: x)
+
+proc Str(x: string): Data =
+  Data(kind: DataKind.String, string: x)
+
+proc Int(x: int): Data =
+  Data(kind: DataKind.Int, int: x)
 
 test "number of conditions != number of facts":
   let prod =

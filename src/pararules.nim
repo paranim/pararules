@@ -118,3 +118,91 @@ macro rule*(dataType: type, body: untyped): untyped =
     if t.hasKey("cond"): t["cond"] else: nil,
     if t.hasKey("then"): t["then"] else: nil
   )
+
+proc parseSchemaPair(pair: NimNode): tuple[key: string, val: string] =
+  expectKind(pair, nnkCall)
+  let key = pair[0]
+  expectKind(key, nnkIdent)
+  var val = pair[1]
+  expectKind(val, nnkStmtList)
+  val = val[0]
+  expectKind(val, nnkIdent)
+  (key.strVal, val.strVal)
+
+proc createBranch(key: string, val: string): NimNode =
+  result = newNimNode(nnkOfBranch)
+  var list = newNimNode(nnkRecList)
+  list.add(newIdentDefs(ident(key), ident(val)))
+  result.add(ident(key.capitalizeAscii), list)
+
+proc createEnum(name: NimNode, pairs: Table[string, string]): NimNode =
+  result = newNimNode(nnkTypeDef).add(
+    newNimNode(nnkPragmaExpr).add(name).add(
+      newNimNode(nnkPragma).add(ident("pure"))),
+    newEmptyNode())
+  var choices = newNimNode(nnkEnumTy).add(newEmptyNode())
+  for name in pairs.keys():
+    choices.add(ident(name.capitalizeAscii))
+  result.add(choices)
+
+proc createTypes(dataType: NimNode, enumName: NimNode, schemaPairs: Table[string, string]): NimNode =
+  let enumType = createEnum(postfix(enumName, "*"), schemaPairs)
+  var cases = newNimNode(nnkRecCase)
+  cases.add(newIdentDefs(postfix(ident("kind"), "*"), enumName))
+  for (key, val) in schemaPairs.pairs():
+    cases.add(createBranch(key, val))
+
+  result = newNimNode(nnkTypeSection)
+  result.add(enumType)
+  result.add(newNimNode(nnkTypeDef).add(
+    postfix(dataType, "*"),
+    newEmptyNode(), #newNimNode(nnkGenericParams),
+    newNimNode(nnkObjectTy).add(
+      newEmptyNode(),
+      newEmptyNode(),
+      newNimNode(nnkRecList).add(cases)
+    )
+  ))
+
+proc createEqBranch(key: string): NimNode =
+  let keyNode = ident(key)
+  result = newNimNode(nnkOfBranch)
+  let eq = infix(newDotExpr(ident("a"), keyNode), "==", newDotExpr(ident("b"), keyNode))
+  let list = newStmtList(newNimNode(nnkReturnStmt).add(eq))
+  result.add(ident(key.capitalizeAscii), list)
+
+proc createEqProc(dataType: NimNode, enumName: NimNode, schemaPairs: Table[string, string]): NimNode =
+  var cases = newNimNode(nnkCaseStmt).add(newDotExpr(ident("a"), ident("kind")))
+  for key in schemaPairs.keys():
+    cases.add(createEqBranch(key))
+
+  let body = quote do:
+    if a.kind == b.kind:
+      `cases`
+    else:
+      return false
+
+  result = newProc(
+    name = postfix(ident("=="), "*"),
+    params = [
+      ident("bool"),
+      newIdentDefs(ident("a"), dataType),
+      newIdentDefs(ident("b"), dataType)
+    ],
+    body = newStmtList(body)
+  )
+
+macro schema*(dataType: untyped, body: untyped): untyped =
+  expectKind(body, nnkStmtList)
+  var schemaPairs: Table[string, string]
+  for child in body:
+    let (key, val) = parseSchemaPair(child)
+    assert not schemaPairs.hasKey(key)
+    schemaPairs[key] = val
+
+  expectKind(dataType, nnkIdent)
+  let enumName = ident(dataType.strVal & "Kind")
+  newStmtList(
+    createTypes(dataType, enumName, schemaPairs),
+    createEqProc(dataType, enumName, schemaPairs)
+  )
