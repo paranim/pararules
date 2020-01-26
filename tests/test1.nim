@@ -31,11 +31,11 @@ test "number of conditions != number of facts":
   let prod =
     rule(Data):
       what:
-        (b, Attr(Color), Str("blue"))
-        (y, Attr(LeftOf), z)
-        (a, Attr(Color), Str("maize"))
-        (y, Attr(RightOf), b)
-        (x, Attr(Height), h)
+        (b, Color, Str("blue"))
+        (y, LeftOf, z)
+        (a, Color, Str("maize"))
+        (y, RightOf, b)
+        (x, Height, h)
       then:
         check a == Id(Alice)
         check b == Id(Bob)
@@ -60,16 +60,16 @@ test "adding facts out of order":
   let prod =
     rule(Data):
       what:
-        (x, Attr(On), y)
-        (y, Attr(LeftOf), z)
-        (z, Attr(Color), Str("red"))
-        (a, Attr(Color), Str("maize"))
-        (b, Attr(Color), Str("blue"))
-        (c, Attr(Color), Str("green"))
-        (d, Attr(Color), Str("white"))
-        (s, Attr(On), Str("table"))
-        (y, Attr(RightOf), b)
-        (a, Attr(LeftOf), d)
+        (x, On, y)
+        (y, LeftOf, z)
+        (z, Color, Str("red"))
+        (a, Color, Str("maize"))
+        (b, Color, Str("blue"))
+        (c, Color, Str("green"))
+        (d, Color, Str("white"))
+        (s, On, Str("table"))
+        (y, RightOf, b)
+        (a, LeftOf, d)
       then:
         check a == Id(Alice)
         check b == Id(Bob)
@@ -98,9 +98,9 @@ test "duplicate facts":
   let prod =
     rule(Data):
       what:
-        (x, Attr(Self), y)
-        (x, Attr(Color), Str("red"))
-        (y, Attr(Color), Str("red"))
+        (x, Self, y)
+        (x, Color, Str("red"))
+        (y, Color, Str("red"))
 
   var session = newSession[Data]()
   let prodNode = session.addProduction(prod)
@@ -114,10 +114,10 @@ test "removing facts":
   let prod =
     rule(Data):
       what:
-        (b, Attr(Color), Str("blue"))
-        (y, Attr(LeftOf), z)
-        (a, Attr(Color), Str("maize"))
-        (y, Attr(RightOf), b)
+        (b, Color, Str("blue"))
+        (y, LeftOf, z)
+        (a, Color, Str("maize"))
+        (y, RightOf, b)
 
   var session = newSession[Data]()
   let prodNode = session.addProduction(prod)
@@ -142,10 +142,10 @@ test "updating facts":
   let prod =
     rule(Data):
       what:
-        (b, Attr(Color), Str("blue"))
-        (y, Attr(LeftOf), z)
-        (a, Attr(Color), Str("maize"))
-        (y, Attr(RightOf), b)
+        (b, Color, Str("blue"))
+        (y, LeftOf, z)
+        (a, Color, Str("maize"))
+        (y, RightOf, b)
       then:
         zVal = z
 
@@ -166,10 +166,10 @@ test "updating facts in different alpha nodes":
   let prod =
     rule(Data):
       what:
-        (b, Attr(Color), Str("blue"))
-        (y, Attr(LeftOf), Id(Zach))
-        (a, Attr(Color), Str("maize"))
-        (y, Attr(RightOf), b)
+        (b, Color, Str("blue"))
+        (y, LeftOf, Id(Zach))
+        (a, Color, Str("maize"))
+        (y, RightOf, b)
 
   var session = newSession[Data]()
   let prodNode = session.addProduction(prod)
@@ -186,10 +186,10 @@ test "complex conditions":
   let prod =
     rule(Data):
       what:
-        (b, Attr(Color), Str("blue"))
-        (y, Attr(LeftOf), z)
-        (a, Attr(Color), Str("maize"))
-        (y, Attr(RightOf), b)
+        (b, Color, Str("blue"))
+        (y, LeftOf, z)
+        (a, Color, Str("maize"))
+        (y, RightOf, b)
       cond:
         z != Id(Zach)
 

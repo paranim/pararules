@@ -3,13 +3,18 @@ import pararules/engine, tables, sets, macros, strutils
 proc isVar(node: NimNode): bool =
   node.kind == nnkIdent and node.strVal[0].isLowerAscii
 
-proc wrapVar(node: NimNode): NimNode =
+proc wrap(node: NimNode, dataType:NimNode, field: Field): NimNode =
   if node.isVar:
     let s = node.strVal
-    quote do:
-      Var(name: `s`)
+    quote do: Var(name: `s`)
   else:
-    node
+    case field:
+      of Identifier:
+        quote do: `dataType`(kind: DataKind.Id, id: `node`)
+      of Attribute:
+        quote do: `dataType`(kind: DataKind.Attr, attr: `node`)
+      of Value:
+        node
 
 proc createLet(ids: Table[string, int], paramNode: NimNode): NimNode =
   result = newStmtList()
@@ -47,9 +52,9 @@ proc getUsedIds(ids: Table[string, int], node: NimNode): Table[string, int] =
 
 proc addCond(dataType:NimNode, ids: Table[string, int], prod: NimNode, node: NimNode, filter: NimNode): NimNode =
   expectKind(node, nnkPar)
-  let id = node[0].wrapVar
-  let attr = node[1].wrapVar
-  let value = node[2].wrapVar
+  let id = node[0].wrap(dataType, Identifier)
+  let attr = node[1].wrap(dataType, Attribute)
+  let value = node[2].wrap(dataType, Value)
   if filter != nil:
     let fn = genSym(nskLet, "fn")
     let v = genSym(nskParam, "v")

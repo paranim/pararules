@@ -2,7 +2,7 @@ import strformat, tables, algorithm
 
 type
   # facts
-  Field = enum
+  Field* = enum
     Identifier, Attribute, Value
   Fact[T] = tuple[id: T, attr: T, value: T]
   Token[T] = tuple[fact: Fact[T], insert: bool]
