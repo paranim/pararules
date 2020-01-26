@@ -1,20 +1,25 @@
 import pararules/engine, tables, sets, macros, strutils
 
+const newPrefix = "new"
+const enumSuffix = "Kind"
+
 proc isVar(node: NimNode): bool =
   node.kind == nnkIdent and node.strVal[0].isLowerAscii
 
 proc wrap(node: NimNode, dataType:NimNode, field: Field): NimNode =
+  let enumName = ident(dataType.strVal & enumSuffix)
   if node.isVar:
     let s = node.strVal
     quote do: Var(name: `s`)
   else:
     case field:
       of Identifier:
-        quote do: `dataType`(kind: DataKind.Id, id: `node`)
+        quote do: `dataType`(kind: `enumName`.Id, id: `node`)
       of Attribute:
-        quote do: `dataType`(kind: DataKind.Attr, attr: `node`)
+        quote do: `dataType`(kind: `enumName`.Attr, attr: `node`)
       of Value:
-        node
+        let newProc = ident(newPrefix & dataType.strVal)
+        quote do: `newProc`(`node`)
 
 proc createLet(ids: Table[string, int], paramNode: NimNode): NimNode =
   result = newStmtList()
@@ -176,7 +181,7 @@ proc createEqBranch(key: string): NimNode =
   let list = newStmtList(newNimNode(nnkReturnStmt).add(eq))
   result.add(ident(key.capitalizeAscii), list)
 
-proc createEqProc(dataType: NimNode, enumName: NimNode, schemaPairs: Table[string, string]): NimNode =
+proc createEqProc(dataType: NimNode, schemaPairs: Table[string, string]): NimNode =
   var cases = newNimNode(nnkCaseStmt).add(newDotExpr(ident("a"), ident("kind")))
   for key in schemaPairs.keys():
     cases.add(createEqBranch(key))
@@ -187,7 +192,7 @@ proc createEqProc(dataType: NimNode, enumName: NimNode, schemaPairs: Table[strin
     else:
       return false
 
-  result = newProc(
+  newProc(
     name = postfix(ident("=="), "*"),
     params = [
       ident("bool"),
@@ -196,6 +201,27 @@ proc createEqProc(dataType: NimNode, enumName: NimNode, schemaPairs: Table[strin
     ],
     body = newStmtList(body)
   )
+
+proc createNewProc(dataType: NimNode, enumName: NimNode, key: string, val: string): NimNode =
+  let enumChoice = newDotExpr(enumName, ident(key.capitalizeAscii))
+  let id = ident(key)
+  let x = ident("x")
+  let body = quote do:
+    `dataType`(kind: `enumChoice`, `id`: `x`)
+
+  newProc(
+    name = postfix(ident(newPrefix & dataType.strVal), "*"),
+    params = [
+      dataType,
+      newIdentDefs(x, ident(val))
+    ],
+    body = newStmtList(body)
+  )
+
+proc createNewProcs(dataType: NimNode, enumName: NimNode, schemaPairs: Table[string, string]): NimNode =
+  result = newStmtList()
+  for (key, val) in schemaPairs.pairs():
+    result.add(createNewProc(dataType, enumName, key, val))
 
 macro schema*(dataType: untyped, body: untyped): untyped =
   expectKind(body, nnkStmtList)
@@ -206,8 +232,9 @@ macro schema*(dataType: untyped, body: untyped): untyped =
     schemaPairs[key] = val
 
   expectKind(dataType, nnkIdent)
-  let enumName = ident(dataType.strVal & "Kind")
+  let enumName = ident(dataType.strVal & enumSuffix)
   newStmtList(
     createTypes(dataType, enumName, schemaPairs),
-    createEqProc(dataType, enumName, schemaPairs)
+    createEqProc(dataType, schemaPairs),
+    createNewProcs(dataType, enumName, schemaPairs)
   )
