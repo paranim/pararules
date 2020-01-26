@@ -49,7 +49,7 @@ type
     conditions: seq[Condition[T]]
     callback: CallbackFn[T]
     name: string
-  Session[T] = object
+  Session*[T] = object
     factType: T
     alphaNode: AlphaNode[T]
     betaNode: MemoryNode[T]
