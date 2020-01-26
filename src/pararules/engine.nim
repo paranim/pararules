@@ -106,7 +106,7 @@ proc isAncestor(x, y: JoinNode): bool =
       node = node.parent.parent
   false
 
-proc addProduction*[T](session: Session[T], production: Production[T]): MemoryNode[T] =
+proc add*[T](session: Session[T], production: Production[T]): MemoryNode[T] =
   result = session.betaNode
   let last = production.conditions.len - 1
   for i in 0 .. last:
@@ -213,7 +213,7 @@ proc rightActivation[T](node: AlphaNode[T], token: Token[T]) =
   for child in node.successors:
     child.rightActivation(token)
 
-proc addFact(node: AlphaNode, fact: Fact, root: bool, insert: bool): bool =
+proc insertFact(node: AlphaNode, fact: Fact, root: bool, insert: bool): bool =
   if not root:
     let val = case node.testField:
       of Field.Identifier: fact[0]
@@ -222,22 +222,22 @@ proc addFact(node: AlphaNode, fact: Fact, root: bool, insert: bool): bool =
     if val != node.testValue:
       return false
   for child in node.children:
-    if child.addFact(fact, false, insert):
+    if child.insertFact(fact, false, insert):
       return true
   node.rightActivation((fact, insert))
   true
 
-proc addFact*[T](session: var Session[T], fact: Fact[T]) =
+proc insertFact*[T](session: var Session[T], fact: Fact[T]) =
   let id = fact.id.type0.ord
   let attr = fact.attr.type1.ord
   let idAttr = (id, attr)
   if session.allFacts.hasKey(idAttr):
     session.removeFact(session.allFacts[idAttr])
   session.allFacts[idAttr] = fact
-  discard session.alphaNode.addFact(fact, true, true)
+  discard session.alphaNode.insertFact(fact, true, true)
 
 proc removeFact*[T](session: Session[T], fact: Fact[T]) =
-  discard session.alphaNode.addFact(fact, true, false)
+  discard session.alphaNode.insertFact(fact, true, false)
 
 proc newSession*[T](): Session[T] =
   result.alphaNode = new(AlphaNode[T])

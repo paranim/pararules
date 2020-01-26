@@ -27,7 +27,7 @@ test "number of conditions != number of facts":
         check z == newData(Zach)
 
   var session = newSession[Data]()
-  let prodNode = session.addProduction(prod)
+  let prodNode = session.add(prod)
   session.insert(Bob, Color, "blue")
   session.insert(Yair, LeftOf, Zach)
   session.insert(Alice, Color, "maize")
@@ -61,7 +61,7 @@ test "adding facts out of order":
         check z == newData(Zach)
 
   var session = newSession[Data]()
-  let prodNode = session.addProduction(prod)
+  let prodNode = session.add(prod)
   session.insert(Xavier, On, Yair)
   session.insert(Yair, LeftOf, Zach)
   session.insert(Zach, Color, "red")
@@ -87,7 +87,7 @@ test "duplicate facts":
         (y, Color, "red")
 
   var session = newSession[Data]()
-  let prodNode = session.addProduction(prod)
+  let prodNode = session.add(prod)
   session.insert(Bob, Self, Bob)
   session.insert(Bob, Color, "red")
 
@@ -104,7 +104,7 @@ test "removing facts":
         (y, RightOf, b)
 
   var session = newSession[Data]()
-  let prodNode = session.addProduction(prod)
+  let prodNode = session.add(prod)
   session.insert(Bob, Color, "blue")
   session.insert(Yair, LeftOf, Zach)
   session.insert(Alice, Color, "maize")
@@ -134,7 +134,7 @@ test "updating facts":
         zVal = z
 
   var session = newSession[Data]()
-  let prodNode = session.addProduction(prod)
+  let prodNode = session.add(prod)
   session.insert(Bob, Color, "blue")
   session.insert(Yair, LeftOf, Zach)
   session.insert(Alice, Color, "maize")
@@ -156,7 +156,7 @@ test "updating facts in different alpha nodes":
         (y, RightOf, b)
 
   var session = newSession[Data]()
-  let prodNode = session.addProduction(prod)
+  let prodNode = session.add(prod)
   session.insert(Bob, Color, "blue")
   session.insert(Yair, LeftOf, Zach)
   session.insert(Alice, Color, "maize")
@@ -178,7 +178,7 @@ test "complex conditions":
         z != newData(Zach)
 
   var session = newSession[Data]()
-  let prodNode = session.addProduction(prod)
+  let prodNode = session.add(prod)
   session.insert(Bob, Color, "blue")
   session.insert(Yair, LeftOf, Zach)
   session.insert(Alice, Color, "maize")

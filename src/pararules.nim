@@ -245,7 +245,7 @@ proc wrapWithNewProc(procName: NimNode, session: NimNode, id: NimNode, attr: Nim
     `procName`(`session`, (`newProc`(`id`), `newProc`(`attr`), `newProc`(`value`)))
 
 macro insert*(session: untyped, id: untyped, attr: untyped, value: untyped): untyped =
-  wrapWithNewProc(ident("addFact"), session, id, attr, value)
+  wrapWithNewProc(ident("insertFact"), session, id, attr, value)
 
 macro remove*(session: untyped, id: untyped, attr: untyped, value: untyped): untyped =
   wrapWithNewProc(ident("removeFact"), session, id, attr, value)
