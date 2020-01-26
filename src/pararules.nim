@@ -236,3 +236,16 @@ macro schema*(body: untyped): untyped =
     createEqProc(dataType, types),
     createNewProcs(dataType, enumName, types)
   )
+
+proc wrapWithNewProc(procName: NimNode, session: NimNode, id: NimNode, attr: NimNode, value: NimNode): NimNode =
+  let typeNode = session.getTypeImpl[2][0][1]
+  expectKind(typeNode, nnkSym)
+  let newProc = ident(newPrefix & typeNode.strVal)
+  quote do:
+    `procName`(`session`, (`newProc`(`id`), `newProc`(`attr`), `newProc`(`value`)))
+
+macro insert*(session: untyped, id: untyped, attr: untyped, value: untyped): untyped =
+  wrapWithNewProc(ident("addFact"), session, id, attr, value)
+
+macro remove*(session: untyped, id: untyped, attr: untyped, value: untyped): untyped =
+  wrapWithNewProc(ident("removeFact"), session, id, attr, value)

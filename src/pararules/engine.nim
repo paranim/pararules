@@ -50,6 +50,7 @@ type
     callback: CallbackFn[T]
     name: string
   Session[T] = object
+    factType: T
     alphaNode: AlphaNode[T]
     betaNode: MemoryNode[T]
     allFacts: Table[IdAttr, Fact[T]]

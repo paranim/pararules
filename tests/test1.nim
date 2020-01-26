@@ -28,14 +28,14 @@ test "number of conditions != number of facts":
 
   var session = newSession[Data]()
   let prodNode = session.addProduction(prod)
-  session.addFact((newData(Bob), newData(Color), newData("blue")))
-  session.addFact((newData(Yair), newData(LeftOf), newData(Zach)))
-  session.addFact((newData(Alice), newData(Color), newData("maize")))
-  session.addFact((newData(Yair), newData(RightOf), newData(Bob)))
+  session.insert(Bob, Color, "blue")
+  session.insert(Yair, LeftOf, Zach)
+  session.insert(Alice, Color, "maize")
+  session.insert(Yair, RightOf, Bob)
 
-  session.addFact((newData(Xavier), newData(Height), newData(72)))
-  session.addFact((newData(Thomas), newData(Height), newData(72)))
-  session.addFact((newData(George), newData(Height), newData(72)))
+  session.insert(Xavier, Height, 72)
+  session.insert(Thomas, Height, 72)
+  session.insert(George, Height, 72)
 
   check prodNode.debugFacts.len == 3
   check prodNode.debugFacts[0].len == 5
@@ -62,18 +62,18 @@ test "adding facts out of order":
 
   var session = newSession[Data]()
   let prodNode = session.addProduction(prod)
-  session.addFact((newData(Xavier), newData(On), newData(Yair)))
-  session.addFact((newData(Yair), newData(LeftOf), newData(Zach)))
-  session.addFact((newData(Zach), newData(Color), newData("red")))
-  session.addFact((newData(Alice), newData(Color), newData("maize")))
-  session.addFact((newData(Bob), newData(Color), newData("blue")))
-  session.addFact((newData(Charlie), newData(Color), newData("green")))
+  session.insert(Xavier, On, Yair)
+  session.insert(Yair, LeftOf, Zach)
+  session.insert(Zach, Color, "red")
+  session.insert(Alice, Color, "maize")
+  session.insert(Bob, Color, "blue")
+  session.insert(Charlie, Color, "green")
  
-  session.addFact((newData(Seth), newData(On), newData("table")))
-  session.addFact((newData(Yair), newData(RightOf), newData(Bob)))
-  session.addFact((newData(Alice), newData(LeftOf), newData(David)))
+  session.insert(Seth, On, "table")
+  session.insert(Yair, RightOf, Bob)
+  session.insert(Alice, LeftOf, David)
 
-  session.addFact((newData(David), newData(Color), newData("white")))
+  session.insert(David, Color, "white")
 
   check prodNode.debugFacts.len == 1
   check prodNode.debugFacts[0].len == 10
@@ -88,8 +88,8 @@ test "duplicate facts":
 
   var session = newSession[Data]()
   let prodNode = session.addProduction(prod)
-  session.addFact((newData(Bob), newData(Self), newData(Bob)))
-  session.addFact((newData(Bob), newData(Color), newData("red")))
+  session.insert(Bob, Self, Bob)
+  session.insert(Bob, Color, "red")
 
   check prodNode.debugFacts.len == 1
   check prodNode.debugFacts[0].len == 3
@@ -105,18 +105,18 @@ test "removing facts":
 
   var session = newSession[Data]()
   let prodNode = session.addProduction(prod)
-  session.addFact((newData(Bob), newData(Color), newData("blue")))
-  session.addFact((newData(Yair), newData(LeftOf), newData(Zach)))
-  session.addFact((newData(Alice), newData(Color), newData("maize")))
-  session.addFact((newData(Yair), newData(RightOf), newData(Bob)))
+  session.insert(Bob, Color, "blue")
+  session.insert(Yair, LeftOf, Zach)
+  session.insert(Alice, Color, "maize")
+  session.insert(Yair, RightOf, Bob)
   check prodNode.debugFacts.len == 1
 
-  session.removeFact((newData(Yair), newData(RightOf), newData(Bob)))
+  session.remove(Yair, RightOf, Bob)
   check prodNode.debugFacts.len == 0
   check prodNode.getParent.debugFacts.len == 1
   check prodNode.getParent.debugFacts[0].len == 3
 
-  session.removeFact((newData(Bob), newData(Color), newData("blue")))
+  session.remove(Bob, Color, "blue")
   check prodNode.debugFacts.len == 0
   check prodNode.getParent.debugFacts.len == 0
 
@@ -135,14 +135,14 @@ test "updating facts":
 
   var session = newSession[Data]()
   let prodNode = session.addProduction(prod)
-  session.addFact((newData(Bob), newData(Color), newData("blue")))
-  session.addFact((newData(Yair), newData(LeftOf), newData(Zach)))
-  session.addFact((newData(Alice), newData(Color), newData("maize")))
-  session.addFact((newData(Yair), newData(RightOf), newData(Bob)))
+  session.insert(Bob, Color, "blue")
+  session.insert(Yair, LeftOf, Zach)
+  session.insert(Alice, Color, "maize")
+  session.insert(Yair, RightOf, Bob)
   check prodNode.debugFacts.len == 1
   check zVal == newData(Zach)
 
-  session.addFact((newData(Yair), newData(LeftOf), newData(Xavier)))
+  session.insert(Yair, LeftOf, Xavier)
   check prodNode.debugFacts.len == 1
   check zVal == newData(Xavier)
 
@@ -157,13 +157,13 @@ test "updating facts in different alpha nodes":
 
   var session = newSession[Data]()
   let prodNode = session.addProduction(prod)
-  session.addFact((newData(Bob), newData(Color), newData("blue")))
-  session.addFact((newData(Yair), newData(LeftOf), newData(Zach)))
-  session.addFact((newData(Alice), newData(Color), newData("maize")))
-  session.addFact((newData(Yair), newData(RightOf), newData(Bob)))
+  session.insert(Bob, Color, "blue")
+  session.insert(Yair, LeftOf, Zach)
+  session.insert(Alice, Color, "maize")
+  session.insert(Yair, RightOf, Bob)
   check prodNode.debugFacts.len == 1
 
-  session.addFact((newData(Yair), newData(LeftOf), newData(Xavier)))
+  session.insert(Yair, LeftOf, Xavier)
   check prodNode.debugFacts.len == 0
 
 test "complex conditions":
@@ -179,12 +179,12 @@ test "complex conditions":
 
   var session = newSession[Data]()
   let prodNode = session.addProduction(prod)
-  session.addFact((newData(Bob), newData(Color), newData("blue")))
-  session.addFact((newData(Yair), newData(LeftOf), newData(Zach)))
-  session.addFact((newData(Alice), newData(Color), newData("maize")))
-  session.addFact((newData(Yair), newData(RightOf), newData(Bob)))
+  session.insert(Bob, Color, "blue")
+  session.insert(Yair, LeftOf, Zach)
+  session.insert(Alice, Color, "maize")
+  session.insert(Yair, RightOf, Bob)
   check prodNode.debugFacts.len == 0
 
-  session.addFact((newData(Yair), newData(LeftOf), newData(Charlie)))
+  session.insert(Yair, LeftOf, Charlie)
   check prodNode.debugFacts.len == 1
 
