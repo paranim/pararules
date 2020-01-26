@@ -6,7 +6,7 @@ const enumSuffix = "Kind"
 proc isVar(node: NimNode): bool =
   node.kind == nnkIdent and node.strVal[0].isLowerAscii
 
-proc wrap(node: NimNode, dataType:NimNode, field: Field): NimNode =
+proc wrap(node: NimNode, dataType: NimNode, field: Field): NimNode =
   let enumName = ident(dataType.strVal & enumSuffix)
   if node.isVar:
     let s = node.strVal
@@ -14,9 +14,11 @@ proc wrap(node: NimNode, dataType:NimNode, field: Field): NimNode =
   else:
     case field:
       of Identifier:
-        quote do: `dataType`(kind: `enumName`.Id, id: `node`)
+        let enumChoice = newDotExpr(enumName, ident(dataType.strVal & "Id"))
+        quote do: `dataType`(kind: `enumChoice`, id: `node`)
       of Attribute:
-        quote do: `dataType`(kind: `enumName`.Attr, attr: `node`)
+        let enumChoice = newDotExpr(enumName, ident(dataType.strVal & "Attr"))
+        quote do: `dataType`(kind: `enumChoice`, attr: `node`)
       of Value:
         let newProc = ident(newPrefix & dataType.strVal)
         quote do: `newProc`(`node`)
@@ -139,28 +141,28 @@ proc parseSchemaPair(pair: NimNode): tuple[key: string, val: string] =
   expectKind(val, nnkIdent)
   (key.strVal, val.strVal)
 
-proc createBranch(key: string, val: string): NimNode =
+proc createBranch(dataType: NimNode, key: string, val: string): NimNode =
   result = newNimNode(nnkOfBranch)
   var list = newNimNode(nnkRecList)
   list.add(newIdentDefs(ident(key), ident(val)))
-  result.add(ident(key.capitalizeAscii), list)
+  result.add(ident(dataType.strVal & key.capitalizeAscii), list)
 
-proc createEnum(name: NimNode, pairs: Table[string, string]): NimNode =
+proc createEnum(name: NimNode, dataType: NimNode, pairs: Table[string, string]): NimNode =
   result = newNimNode(nnkTypeDef).add(
     newNimNode(nnkPragmaExpr).add(name).add(
       newNimNode(nnkPragma).add(ident("pure"))),
     newEmptyNode())
   var choices = newNimNode(nnkEnumTy).add(newEmptyNode())
   for name in pairs.keys():
-    choices.add(ident(name.capitalizeAscii))
+    choices.add(ident(dataType.strVal & name.capitalizeAscii))
   result.add(choices)
 
 proc createTypes(dataType: NimNode, enumName: NimNode, schemaPairs: Table[string, string]): NimNode =
-  let enumType = createEnum(postfix(enumName, "*"), schemaPairs)
+  let enumType = createEnum(postfix(enumName, "*"), dataType, schemaPairs)
   var cases = newNimNode(nnkRecCase)
   cases.add(newIdentDefs(postfix(ident("kind"), "*"), enumName))
   for (key, val) in schemaPairs.pairs():
-    cases.add(createBranch(key, val))
+    cases.add(createBranch(dataType, key, val))
 
   result = newNimNode(nnkTypeSection)
   result.add(enumType)
@@ -174,17 +176,17 @@ proc createTypes(dataType: NimNode, enumName: NimNode, schemaPairs: Table[string
     )
   ))
 
-proc createEqBranch(key: string): NimNode =
+proc createEqBranch(dataType: NimNode, key: string): NimNode =
   let keyNode = ident(key)
   result = newNimNode(nnkOfBranch)
   let eq = infix(newDotExpr(ident("a"), keyNode), "==", newDotExpr(ident("b"), keyNode))
   let list = newStmtList(newNimNode(nnkReturnStmt).add(eq))
-  result.add(ident(key.capitalizeAscii), list)
+  result.add(ident(dataType.strVal & key.capitalizeAscii), list)
 
 proc createEqProc(dataType: NimNode, schemaPairs: Table[string, string]): NimNode =
   var cases = newNimNode(nnkCaseStmt).add(newDotExpr(ident("a"), ident("kind")))
   for key in schemaPairs.keys():
-    cases.add(createEqBranch(key))
+    cases.add(createEqBranch(dataType, key))
 
   let body = quote do:
     if a.kind == b.kind:
@@ -203,7 +205,7 @@ proc createEqProc(dataType: NimNode, schemaPairs: Table[string, string]): NimNod
   )
 
 proc createNewProc(dataType: NimNode, enumName: NimNode, key: string, val: string): NimNode =
-  let enumChoice = newDotExpr(enumName, ident(key.capitalizeAscii))
+  let enumChoice = newDotExpr(enumName, ident(dataType.strVal & key.capitalizeAscii))
   let id = ident(key)
   let x = ident("x")
   let body = quote do:

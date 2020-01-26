@@ -3,15 +3,15 @@ import pararules, pararules/engine
 import tables
 
 type
-  Person = enum
+  Id = enum
     Alice, Bob, Charlie, David, George,
     Seth, Thomas, Xavier, Yair, Zach
-  Property = enum
+  Attr = enum
     Color, LeftOf, RightOf, Height, On, Self
 
 schema Data:
-  id: Person
-  attr: Property
+  id: Id
+  attr: Attr
   string: string
   int: int
 
