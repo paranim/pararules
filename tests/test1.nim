@@ -42,7 +42,7 @@ test "number of conditions != number of facts":
 
 test "adding facts out of order":
   let prod =
-    rule(Data):
+    rule outOfOrder(Data):
       what:
         (x, On, y)
         (y, LeftOf, z)
@@ -80,7 +80,7 @@ test "adding facts out of order":
 
 test "duplicate facts":
   let prod =
-    rule(Data):
+    rule duplicateFacts(Data):
       what:
         (x, Self, y)
         (x, Color, "red")
@@ -96,7 +96,7 @@ test "duplicate facts":
 
 test "removing facts":
   let prod =
-    rule(Data):
+    rule removingFacts(Data):
       what:
         (b, Color, "blue")
         (y, LeftOf, z)
@@ -124,7 +124,7 @@ test "updating facts":
   var zVal: Data
 
   let prod =
-    rule(Data):
+    rule updatingFacts(Data):
       what:
         (b, Color, "blue")
         (y, LeftOf, z)
@@ -148,7 +148,7 @@ test "updating facts":
 
 test "updating facts in different alpha nodes":
   let prod =
-    rule(Data):
+    rule updatingFactsDiffNodes(Data):
       what:
         (b, Color, "blue")
         (y, LeftOf, Zach)
@@ -168,7 +168,7 @@ test "updating facts in different alpha nodes":
 
 test "complex conditions":
   let prod =
-    rule(Data):
+    rule complexCond(Data):
       what:
         (b, Color, "blue")
         (y, LeftOf, z)

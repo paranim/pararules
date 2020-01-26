@@ -48,6 +48,7 @@ type
   Production[T] = object
     conditions: seq[Condition[T]]
     callback: CallbackFn[T]
+    name: string
   Session[T] = object
     alphaNode: AlphaNode[T]
     betaNode: MemoryNode[T]
@@ -241,7 +242,8 @@ proc newSession*[T](): Session[T] =
   result.alphaNode = new(AlphaNode[T])
   result.betaNode = new(MemoryNode[T])
 
-proc newProduction*[T](cb: CallbackFn[T]): Production[T] =
+proc newProduction*[T](name: string, cb: CallbackFn[T]): Production[T] =
+  result.name = name
   result.callback = cb
 
 proc print(fact: Fact, indent: int): string

@@ -76,7 +76,7 @@ proc addCond(dataType:NimNode, ids: Table[string, int], prod: NimNode, node: Nim
     quote do:
       addCondition(`prod`, `id`, `attr`, `value`)
 
-proc parseWhat(dataType: NimNode, node: NimNode, condNode: NimNode, thenNode: NimNode): NimNode =
+proc parseWhat(name: string, dataType: NimNode, node: NimNode, condNode: NimNode, thenNode: NimNode): NimNode =
   var ids: Table[string, int]
   for condNum in 0 ..< node.len:
     let child = node[condNum]
@@ -99,14 +99,14 @@ proc parseWhat(dataType: NimNode, node: NimNode, condNode: NimNode, thenNode: Ni
     let usedIds = getUsedIds(ids, thenNode)
     let letNode = createLet(usedIds, v)
     result = newStmtList(quote do:
-      var `prod` = newProduction[`dataType`](proc (`v`: Table[string, `dataType`]) =
+      var `prod` = newProduction[`dataType`](`name`, proc (`v`: Table[string, `dataType`]) =
         `letNode`
         `thenNode`
       )
     )
   else:
     result = newStmtList(quote do:
-      var `prod` = newProduction[`dataType`](proc (`v`: Table[string, `dataType`]) = discard
+      var `prod` = newProduction[`dataType`](`name`, proc (`v`: Table[string, `dataType`]) = discard
       )
     )
 
@@ -115,7 +115,7 @@ proc parseWhat(dataType: NimNode, node: NimNode, condNode: NimNode, thenNode: Ni
     result.add addCond(datatype, ids, prod, child, if conds.hasKey(condNum): conds[condNum] else: nil)
   result.add prod
 
-macro rule*(dataType: type, body: untyped): untyped =
+macro rule*(sig: untyped, body: untyped): untyped =
   expectKind(body, nnkStmtList)
   result = newStmtList()
   var t: Table["string", NimNode]
@@ -124,7 +124,11 @@ macro rule*(dataType: type, body: untyped): untyped =
     let id = child[0]
     expectKind(id, nnkIdent)
     t[id.strVal] = child[1]
+
+  let name = if sig.kind == nnkCall: sig[0].strVal else: ""
+  let dataType = if sig.kind == nnkCall: sig[1] else: sig
   result.add parseWhat(
+    name,
     dataType,
     t["what"],
     if t.hasKey("cond"): t["cond"] else: nil,
