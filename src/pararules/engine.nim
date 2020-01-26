@@ -284,7 +284,7 @@ proc print(node: AlphaNode, indent: int): string =
     for i in 0 ..< indent:
       result &= "  "
     result &= "{node.testField} = {node.testValue} ({cnt})\n".fmt
-  for fact in node.facts:
+  for fact in node.facts.values:
     result &= print(fact, indent+1)
   for child in node.children:
     result &= print(child, indent+1)
