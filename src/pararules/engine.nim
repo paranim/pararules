@@ -81,12 +81,7 @@ proc add*[T](production: var Production[T], id: Var or T, attr: T, value: Var or
           temp.field = fieldType
           condition.vars.add(temp)
       of Field.Attribute:
-        when attr is T:
-          condition.nodes.add AlphaNode[T](testField: fieldType, testValue: attr)
-        else:
-          var temp = attr
-          temp.field = fieldType
-          condition.vars.add(temp)
+        condition.nodes.add AlphaNode[T](testField: fieldType, testValue: attr)
       of Field.Value:
         when value is T:
           condition.nodes.add AlphaNode[T](testField: fieldType, testValue: value)
