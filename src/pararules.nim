@@ -157,8 +157,9 @@ macro ruleWithAttrs*(sig: untyped, attrsNode: typed, body: untyped): untyped =
     let val = child[1].intVal
     attrs[key] = cast[int](val)
 
-  let name = if sig.kind == nnkCall: sig[0].strVal else: ""
-  let dataType = if sig.kind == nnkCall: sig[1] else: sig
+  expectKind(sig, nnkCall)
+  let name = sig[0].strVal
+  let dataType = sig[1]
   result.add parseWhat(
     name,
     dataType,

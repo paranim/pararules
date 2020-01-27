@@ -19,7 +19,7 @@ schema Data(Id, Attr):
 
 test "number of conditions != number of facts":
   let prod =
-    rule(Data):
+    rule numCondsAndFacts(Data):
       what:
         (b, Color, "blue")
         (y, LeftOf, z)
