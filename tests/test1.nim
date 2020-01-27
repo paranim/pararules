@@ -194,3 +194,13 @@ test "complex conditions":
   session.insert(Yair, LeftOf, Charlie)
   check prodNode.debugFacts.len == 1
 
+# this one is not used...
+# it's just here to make sure we can define
+# multiple schemas in one module
+schema Stuff(Id, Attr):
+  Color: int
+  LeftOf: Id
+  RightOf: Id
+  Height: float
+  On: string
+  Self: Id

@@ -285,7 +285,12 @@ proc createUpdateProc(dataType: NimNode, idType: NimNode, attrType: NimNode, val
     checkProcId = ident(checkPrefix & dataType.strVal)
     newProc = ident(newPrefix & dataType.strVal)
     session = ident("session")
-    sessionType = newNimNode(nnkVarTy).add(ident("Session"))
+    sessionType = newNimNode(nnkVarTy).add(block:
+      var node = newNimNode(nnkBracketExpr)
+      node.add(ident("Session"))
+      node.add(dataType)
+      node
+    )
     id = ident("id")
     attr = ident("attr")
     value = ident("value")
