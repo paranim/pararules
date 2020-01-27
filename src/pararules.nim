@@ -13,22 +13,31 @@ type
 proc isVar(node: NimNode): bool =
   node.kind == nnkIdent and node.strVal[0].isLowerAscii
 
-proc wrap(node: NimNode, dataType: NimNode, field: Field): NimNode =
+proc wrap(parentNode: NimNode, dataType: NimNode, index: int): NimNode =
   let enumName = ident(dataType.strVal & enumSuffix)
+  let node = parentNode[index]
   if node.isVar:
     let s = node.strVal
     quote do: Var(name: `s`)
   else:
-    case field:
-      of Identifier:
+    case index:
+      of 0:
         let enumChoice = newDotExpr(enumName, ident(dataType.strVal & typeEnumPrefix & "0"))
         quote do: `dataType`(kind: `enumChoice`, type0: `node`)
-      of Attribute:
+      of 1:
         let enumChoice = newDotExpr(enumName, ident(dataType.strVal & typeEnumPrefix & "1"))
         quote do: `dataType`(kind: `enumChoice`, type1: `node`)
-      of Value:
-        let newProc = ident(newPrefix & dataType.strVal)
-        quote do: `newProc`(`node`)
+      else:
+        let
+          dataNode = genSym(nskLet, "node")
+          checkProc = ident(checkPrefix & dataType.strVal)
+          newProc = ident(newPrefix & dataType.strVal)
+          attrName = ident(parentNode[1].strVal)
+        quote do:
+          let `dataNode` = `newProc`(`node`)
+          when not defined(release):
+            `checkProc`(`attrName`, `dataNode`.kind.ord)
+          `dataNode`
 
 proc createLet(vars: Table[string, VarInfo], paramNode: NimNode): NimNode =
   result = newStmtList()
@@ -67,9 +76,9 @@ proc getUsedVars(vars: Table[string, VarInfo], node: NimNode): Table[string, Var
 
 proc addCond(dataType:NimNode, vars: Table[string, VarInfo], prod: NimNode, node: NimNode, filter: NimNode): NimNode =
   expectKind(node, nnkPar)
-  let id = node[0].wrap(dataType, Identifier)
-  let attr = node[1].wrap(dataType, Attribute)
-  let value = node[2].wrap(dataType, Value)
+  let id = node.wrap(dataType, 0)
+  let attr = node.wrap(dataType, 1)
+  let value = node.wrap(dataType, 2)
   if filter != nil:
     let fn = genSym(nskLet, "fn")
     let v = genSym(nskParam, "v")
@@ -89,7 +98,6 @@ proc parseWhat(name: string, dataType: NimNode, attrs: Table[string, int], node:
   for condNum in 0 ..< node.len:
     let child = node[condNum]
     expectKind(child, nnkPar)
-    var attrType = -1
     for i in 0..2:
       if child[i].isVar:
         if i == 1:
