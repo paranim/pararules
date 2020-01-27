@@ -1,6 +1,7 @@
 import pararules/engine, tables, sets, macros, strutils
 
 const newPrefix = "new"
+const checkPrefix = "check"
 const attrPrefix = "attr"
 const typePrefix = "type"
 const typeEnumPrefix = "Type"
@@ -244,33 +245,54 @@ proc createNewProc(dataType: NimNode, enumName: NimNode, index: int, typ: NimNod
     body = newStmtList(body)
   )
 
-proc createAttrConstant(dataType: NimNode, attrs: Table[string, int]): NimNode =
-  let constName = ident(attrPrefix & dataType.strVal)
-  var attrTable = newNimNode(nnkTableConstr)
-  for (attr, typeNum) in attrs.pairs():
-    var pair = newNimNode(nnkExprColonExpr)
-    pair.add(attr.newLit)
-    pair.add(typeNum.newLit)
-    attrTable.add(pair)
-  quote do:
-    const `constName`* = `attrTable`
-
 proc createNewProcs(dataType: NimNode, enumName: NimNode, types: seq[NimNode]): NimNode =
   result = newStmtList()
   for i in 0 ..< types.len:
     result.add(createNewProc(dataType, enumName, i, types[i]))
 
-proc createUpdateProc(dataType: NimNode, idType: NimNode, attrType: NimNode, valueType: NimNode, procName: string): NimNode =
+proc createCheckProc(dataType: NimNode, types: seq[NimNode], attrs: Table[string, int]): NimNode =
+  let
+    procId = ident(checkPrefix & dataType.strVal)
+    attr = ident("attr")
+    value = ident("valueTypeNum")
+    body = newNimNode(nnkCaseStmt).add(attr)
+    attrType = types[1]
+
+  for (typeName, typeNum) in attrs.pairs:
+    var branch = newNimNode(nnkOfBranch)
+    let correctTypeNum = typeNum.newLit
+    let correctTypeName = types[typeNum].strVal
+    let branchBody = quote do:
+      if `value` != `correctTypeNum`:
+        raise newException(Exception, $`attr` & " should be a " & `correctTypeName`)
+    branch.add(ident(typeName), branchBody)
+    body.add(branch)
+
+  newProc(
+    name = postfix(procId, "*"),
+    params = [
+      ident("void"),
+      newIdentDefs(attr, attrType),
+      newIdentDefs(value, ident("int"))
+    ],
+    body = newStmtList(body)
+  )
+
+proc createUpdateProc(dataType: NimNode, idType: NimNode, attrType: NimNode, valueType: NimNode, valueTypeNum: int, procName: string): NimNode =
   let
     procId = ident(procName)
     engineProcId = ident(procName & "Fact")
+    checkProcId = ident(checkPrefix & dataType.strVal)
     newProc = ident(newPrefix & dataType.strVal)
     session = ident("session")
     sessionType = newNimNode(nnkVarTy).add(ident("Session"))
     id = ident("id")
     attr = ident("attr")
     value = ident("value")
+    valueTypeLit = valueTypeNum.newLit
     body = quote do:
+      when not defined(release):
+        `checkProcId`(`attr`, `valueTypeLit`)
       `engineProcId`(`session`, (`newProc`(`id`), `newProc`(`attr`), `newProc`(`value`)))
 
   newProc(
@@ -288,7 +310,18 @@ proc createUpdateProc(dataType: NimNode, idType: NimNode, attrType: NimNode, val
 proc createUpdateProcs(dataType: NimNode, types: seq[NimNode], procName: string): NimNode =
   result = newStmtList()
   for i in 0 ..< types.len:
-    result.add(createUpdateProc(dataType, types[0], types[1], types[i], procName))
+    result.add(createUpdateProc(dataType, types[0], types[1], types[i], i, procName))
+
+proc createAttrConstant(dataType: NimNode, attrs: Table[string, int]): NimNode =
+  let constName = ident(attrPrefix & dataType.strVal)
+  var attrTable = newNimNode(nnkTableConstr)
+  for (attr, typeNum) in attrs.pairs():
+    var pair = newNimNode(nnkExprColonExpr)
+    pair.add(attr.newLit)
+    pair.add(typeNum.newLit)
+    attrTable.add(pair)
+  quote do:
+    const `constName`* = `attrTable`
 
 macro schema*(sig: untyped, body: untyped): untyped =
   expectKind(sig, nnkCall)
@@ -318,8 +351,9 @@ macro schema*(sig: untyped, body: untyped): untyped =
     createTypes(dataType, enumName, types),
     createEqProc(dataType, types),
     createNewProcs(dataType, enumName, types),
-    createAttrConstant(dataType, attrs),
+    createCheckProc(dataType, types, attrs),
     createUpdateProcs(dataType, types, "insert"),
-    createUpdateProcs(dataType, types, "remove")
+    createUpdateProcs(dataType, types, "remove"),
+    createAttrConstant(dataType, attrs)
   )
 
