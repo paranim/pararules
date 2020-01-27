@@ -1,7 +1,13 @@
 import pararules/engine, tables, sets, macros, strutils
 
 const newPrefix = "new"
+const attrPrefix = "attr"
+const typePrefix = "type"
+const typeEnumPrefix = "Type"
 const enumSuffix = "Kind"
+
+type
+  VarInfo = tuple[condNum: int, typeNum: int]
 
 proc isVar(node: NimNode): bool =
   node.kind == nnkIdent and node.strVal[0].isLowerAscii
@@ -14,22 +20,23 @@ proc wrap(node: NimNode, dataType: NimNode, field: Field): NimNode =
   else:
     case field:
       of Identifier:
-        let enumChoice = newDotExpr(enumName, ident(dataType.strVal & "Type0"))
+        let enumChoice = newDotExpr(enumName, ident(dataType.strVal & typeEnumPrefix & "0"))
         quote do: `dataType`(kind: `enumChoice`, type0: `node`)
       of Attribute:
-        let enumChoice = newDotExpr(enumName, ident(dataType.strVal & "Type1"))
+        let enumChoice = newDotExpr(enumName, ident(dataType.strVal & typeEnumPrefix & "1"))
         quote do: `dataType`(kind: `enumChoice`, type1: `node`)
       of Value:
         let newProc = ident(newPrefix & dataType.strVal)
         quote do: `newProc`(`node`)
 
-proc createLet(ids: Table[string, int], paramNode: NimNode): NimNode =
+proc createLet(vars: Table[string, VarInfo], paramNode: NimNode): NimNode =
   result = newStmtList()
-  for s in ids.keys:
+  for (s, nums) in vars.pairs:
+    let typeField = ident(typePrefix & $nums.typeNum)
     result.add(newLetStmt(
       newIdentNode(s),
       quote do:
-        `paramNode`[`s`]
+        `paramNode`[`s`].`typeField`
     ))
 
 proc getVarsInNode(node: NimNode): HashSet[string] =
@@ -38,13 +45,13 @@ proc getVarsInNode(node: NimNode): HashSet[string] =
   for child in node:
     result = result.union(child.getVarsInNode)
 
-proc parseCond(ids: Table[string, int], node: NimNode): Table[int, NimNode] =
+proc parseCond(vars: Table[string, VarInfo], node: NimNode): Table[int, NimNode] =
   expectKind(node, nnkStmtList)
   for condNode in node:
     var condNum = 0
     for ident in condNode.getVarsInNode:
-      if ids.hasKey(ident):
-        condNum = max(condNum, ids[ident])
+      if vars.hasKey(ident):
+        condNum = max(condNum, vars[ident].condNum)
     if result.hasKey(condNum):
       let prevCond = result[condNum]
       result[condNum] = quote do:
@@ -52,12 +59,12 @@ proc parseCond(ids: Table[string, int], node: NimNode): Table[int, NimNode] =
     else:
       result[condNum] = condNode
 
-proc getUsedIds(ids: Table[string, int], node: NimNode): Table[string, int] =
+proc getUsedVars(vars: Table[string, VarInfo], node: NimNode): Table[string, VarInfo] =
   for v in node.getVarsInNode:
-    if ids.hasKey(v):
-      result[v] = ids[v]
+    if vars.hasKey(v):
+      result[v] = vars[v]
 
-proc addCond(dataType:NimNode, ids: Table[string, int], prod: NimNode, node: NimNode, filter: NimNode): NimNode =
+proc addCond(dataType:NimNode, vars: Table[string, VarInfo], prod: NimNode, node: NimNode, filter: NimNode): NimNode =
   expectKind(node, nnkPar)
   let id = node[0].wrap(dataType, Identifier)
   let attr = node[1].wrap(dataType, Attribute)
@@ -65,8 +72,8 @@ proc addCond(dataType:NimNode, ids: Table[string, int], prod: NimNode, node: Nim
   if filter != nil:
     let fn = genSym(nskLet, "fn")
     let v = genSym(nskParam, "v")
-    let usedIds = getUsedIds(ids, filter)
-    let letNode = createLet(usedIds, v)
+    let usedVars = getUsedVars(vars, filter)
+    let letNode = createLet(usedVars, v)
     quote do:
       let `fn` = proc (`v`: Table[string, `dataType`]): bool =
         `letNode`
@@ -76,28 +83,35 @@ proc addCond(dataType:NimNode, ids: Table[string, int], prod: NimNode, node: Nim
     quote do:
       add(`prod`, `id`, `attr`, `value`)
 
-proc parseWhat(name: string, dataType: NimNode, node: NimNode, condNode: NimNode, thenNode: NimNode): NimNode =
-  var ids: Table[string, int]
+proc parseWhat(name: string, dataType: NimNode, attrs: Table[string, int], node: NimNode, condNode: NimNode, thenNode: NimNode): NimNode =
+  var vars: Table[string, VarInfo]
   for condNum in 0 ..< node.len:
     let child = node[condNum]
     expectKind(child, nnkPar)
+    var attrType = -1
     for i in 0..2:
-      if child[i].kind == nnkIdent:
+      if child[i].isVar:
+        if i == 1:
+          raise newException(Exception, "Variables may not be placed in the attribute column")
         let s = child[i].strVal
-        if not ids.hasKey(s):
-          ids[s] = condNum
+        let typeNum = case i:
+          of 0: 0
+          of 1: 1
+          else: attrs[child[1].strVal]
+        if not vars.hasKey(s):
+          vars[s] = (condNum, typeNum)
 
   expectKind(node, nnkStmtList)
   var conds: Table[int, NimNode]
   if condNode != nil:
-    conds = parseCond(ids, condNode)
+    conds = parseCond(vars, condNode)
 
   let prod = genSym(nskVar, "prod")
   let v = genSym(nskParam, "v")
 
   if thenNode != nil:
-    let usedIds = getUsedIds(ids, thenNode)
-    let letNode = createLet(usedIds, v)
+    let usedVars = getUsedVars(vars, thenNode)
+    let letNode = createLet(usedVars, v)
     result = newStmtList(quote do:
       var `prod` = newProduction[`dataType`](`name`, proc (`v`: Table[string, `dataType`]) =
         `letNode`
@@ -112,34 +126,50 @@ proc parseWhat(name: string, dataType: NimNode, node: NimNode, condNode: NimNode
 
   for condNum in 0 ..< node.len:
     let child = node[condNum]
-    result.add addCond(datatype, ids, prod, child, if conds.hasKey(condNum): conds[condNum] else: nil)
+    result.add addCond(datatype, vars, prod, child, if conds.hasKey(condNum): conds[condNum] else: nil)
   result.add prod
 
-macro rule*(sig: untyped, body: untyped): untyped =
+macro ruleWithAttrs*(sig: untyped, attrsNode: typed, body: untyped): untyped =
   expectKind(body, nnkStmtList)
   result = newStmtList()
-  var t: Table["string", NimNode]
+  var t: Table[string, NimNode]
   for child in body:
     expectKind(child, nnkCall)
     let id = child[0]
     expectKind(id, nnkIdent)
     t[id.strVal] = child[1]
 
+  let attrsImpl = attrsNode.getImpl
+  expectKind(attrsImpl, nnkBracket)
+  var attrs: Table[string, int]
+  for child in attrsImpl:
+    expectKind(child, nnkTupleConstr)
+    let key = child[0].strVal
+    let val = child[1].intVal
+    attrs[key] = cast[int](val)
+
   let name = if sig.kind == nnkCall: sig[0].strVal else: ""
   let dataType = if sig.kind == nnkCall: sig[1] else: sig
   result.add parseWhat(
     name,
     dataType,
+    attrs,
     t["what"],
     if t.hasKey("cond"): t["cond"] else: nil,
     if t.hasKey("then"): t["then"] else: nil
   )
 
+macro rule*(sig: untyped, body: untyped): untyped =
+  let dataType = if sig.kind == nnkCall: sig[1] else: sig
+  let constName = ident(attrPrefix & dataType.strVal)
+  quote do:
+    ruleWithAttrs(`sig`, `constName`, `body`)
+
 proc createBranch(dataType: NimNode, index: int, typ: NimNode): NimNode =
   result = newNimNode(nnkOfBranch)
   var list = newNimNode(nnkRecList)
-  list.add(newIdentDefs(ident("type" & $index), typ))
-  result.add(ident(dataType.strVal & "Type" & $index), list)
+  list.add(newIdentDefs(ident(typePrefix & $index), typ))
+  result.add(ident(dataType.strVal & typeEnumPrefix & $index), list)
 
 proc createEnum(name: NimNode, dataType: NimNode, types: seq[NimNode]): NimNode =
   result = newNimNode(nnkTypeDef).add(
@@ -148,7 +178,7 @@ proc createEnum(name: NimNode, dataType: NimNode, types: seq[NimNode]): NimNode 
     newEmptyNode())
   var choices = newNimNode(nnkEnumTy).add(newEmptyNode())
   for i in 0 ..< types.len:
-    choices.add(ident(dataType.strVal & "Type" & $i))
+    choices.add(ident(dataType.strVal & typeEnumPrefix & $i))
   result.add(choices)
 
 proc createTypes(dataType: NimNode, enumName: NimNode, types: seq[NimNode]): NimNode =
@@ -171,11 +201,11 @@ proc createTypes(dataType: NimNode, enumName: NimNode, types: seq[NimNode]): Nim
   ))
 
 proc createEqBranch(dataType: NimNode, index: int): NimNode =
-  let keyNode = ident("type" & $index)
+  let keyNode = ident(typePrefix & $index)
   result = newNimNode(nnkOfBranch)
   let eq = infix(newDotExpr(ident("a"), keyNode), "==", newDotExpr(ident("b"), keyNode))
   let list = newStmtList(newNimNode(nnkReturnStmt).add(eq))
-  result.add(ident(dataType.strVal & "Type" & $index), list)
+  result.add(ident(dataType.strVal & typeEnumPrefix & $index), list)
 
 proc createEqProc(dataType: NimNode, types: seq[NimNode]): NimNode =
   var cases = newNimNode(nnkCaseStmt).add(newDotExpr(ident("a"), ident("kind")))
@@ -199,8 +229,8 @@ proc createEqProc(dataType: NimNode, types: seq[NimNode]): NimNode =
   )
 
 proc createNewProc(dataType: NimNode, enumName: NimNode, index: int, typ: NimNode): NimNode =
-  let enumChoice = newDotExpr(enumName, ident(dataType.strVal & "Type" & $index))
-  let id = ident("type" & $index)
+  let enumChoice = newDotExpr(enumName, ident(dataType.strVal & typeEnumPrefix & $index))
+  let id = ident(typePrefix & $index)
   let x = ident("x")
   let body = quote do:
     `dataType`(kind: `enumChoice`, `id`: `x`)
@@ -219,22 +249,46 @@ proc createNewProcs(dataType: NimNode, enumName: NimNode, types: seq[NimNode]): 
   for i in 0 ..< types.len:
     result.add(createNewProc(dataType, enumName, i, types[i]))
 
-macro schema*(body: untyped): untyped =
-  expectKind(body, nnkCall)
+proc createAttrConstant(dataType: NimNode, attrs: Table[string, int]): NimNode =
+  let constName = ident(attrPrefix & dataType.strVal)
+  var attrTable = newNimNode(nnkTableConstr)
+  for (attr, typeNum) in attrs.pairs():
+    var pair = newNimNode(nnkExprColonExpr)
+    pair.add(attr.newLit)
+    pair.add(typeNum.newLit)
+    attrTable.add(pair)
+  quote do:
+    const `constName`* = `attrTable`
+
+macro schema*(sig: untyped, body: untyped): untyped =
+  expectKind(sig, nnkCall)
   var types: seq[NimNode]
-  for i in 1 ..< body.len:
-    let typ = body[i]
+  for i in 1 ..< sig.len:
+    let typ = sig[i]
     expectKind(typ, nnkIdent)
-    assert not (typ in types)
     types.add(typ)
 
-  let dataType = body[0]
+  expectKind(body, nnkStmtList)
+  var attrs: Table[string, int]
+  for pair in body:
+    expectKind(pair, nnkCall)
+    let attr = pair[0].strVal
+    let typ = pair[1][0]
+    assert not (attr in attrs)
+    if not (typ in types):
+      types.add(typ)
+    let index = types.find(typ)
+    attrs[attr] = index
+
+  let dataType = sig[0]
   expectKind(dataType, nnkIdent)
+
   let enumName = ident(dataType.strVal & enumSuffix)
   newStmtList(
     createTypes(dataType, enumName, types),
     createEqProc(dataType, types),
-    createNewProcs(dataType, enumName, types)
+    createNewProcs(dataType, enumName, types),
+    createAttrConstant(dataType, attrs)
   )
 
 proc wrapWithNewProc(procName: NimNode, session: NimNode, id: NimNode, attr: NimNode, value: NimNode): NimNode =

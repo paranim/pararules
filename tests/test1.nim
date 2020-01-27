@@ -9,7 +9,13 @@ type
   Attr = enum
     Color, LeftOf, RightOf, Height, On, Self
 
-schema Data(Id, Attr, string, int)
+schema Data(Id, Attr):
+  Color: string
+  LeftOf: Id
+  RightOf: Id
+  Height: int
+  On: string
+  Self: Id
 
 test "number of conditions != number of facts":
   let prod =
@@ -21,10 +27,10 @@ test "number of conditions != number of facts":
         (y, RightOf, b)
         (x, Height, h)
       then:
-        check a == newData(Alice)
-        check b == newData(Bob)
-        check y == newData(Yair)
-        check z == newData(Zach)
+        check a == Alice
+        check b == Bob
+        check y == Yair
+        check z == Zach
 
   var session = newSession[Data]()
   let prodNode = session.add(prod)
@@ -44,7 +50,7 @@ test "adding facts out of order":
   let prod =
     rule outOfOrder(Data):
       what:
-        (x, On, y)
+        (x, RightOf, y)
         (y, LeftOf, z)
         (z, Color, "red")
         (a, Color, "maize")
@@ -55,14 +61,14 @@ test "adding facts out of order":
         (y, RightOf, b)
         (a, LeftOf, d)
       then:
-        check a == newData(Alice)
-        check b == newData(Bob)
-        check y == newData(Yair)
-        check z == newData(Zach)
+        check a == Alice
+        check b == Bob
+        check y == Yair
+        check z == Zach
 
   var session = newSession[Data]()
   let prodNode = session.add(prod)
-  session.insert(Xavier, On, Yair)
+  session.insert(Xavier, RightOf, Yair)
   session.insert(Yair, LeftOf, Zach)
   session.insert(Zach, Color, "red")
   session.insert(Alice, Color, "maize")
@@ -121,7 +127,7 @@ test "removing facts":
   check prodNode.getParent.debugFacts.len == 0
 
 test "updating facts":
-  var zVal: Data
+  var zVal: Id
 
   let prod =
     rule updatingFacts(Data):
@@ -140,11 +146,11 @@ test "updating facts":
   session.insert(Alice, Color, "maize")
   session.insert(Yair, RightOf, Bob)
   check prodNode.debugFacts.len == 1
-  check zVal == newData(Zach)
+  check zVal == Zach
 
   session.insert(Yair, LeftOf, Xavier)
   check prodNode.debugFacts.len == 1
-  check zVal == newData(Xavier)
+  check zVal == Xavier
 
 test "updating facts in different alpha nodes":
   let prod =
@@ -175,7 +181,7 @@ test "complex conditions":
         (a, Color, "maize")
         (y, RightOf, b)
       cond:
-        z != newData(Zach)
+        z != Zach
 
   var session = newSession[Data]()
   let prodNode = session.add(prod)
