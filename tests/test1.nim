@@ -194,6 +194,26 @@ test "complex conditions":
   session.insert(Yair, LeftOf, Charlie)
   check prodNode.debugFacts.len == 1
 
+test "queries":
+  let prod =
+    rule getBob(Data):
+      what:
+        (Bob, Color, color)
+        (Bob, LeftOf, leftOf)
+        (Bob, Height, height)
+
+  var session = newSession[Data]()
+  let prodNode = session.add(prod)
+  session.insert(Bob, Color, "blue")
+  session.insert(Bob, LeftOf, Zach)
+  session.insert(Bob, Height, 72)
+
+  check session.isReady(prod) == true
+  let res = session.query(prod)
+  check res.color == "blue"
+  check res.leftOf == Zach
+  check res.height == 72
+
 # this one is not used...
 # it's just here to make sure we can define
 # multiple schemas in one module

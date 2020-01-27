@@ -12,6 +12,7 @@ type
     name*: string
     field: Field
   CallbackFn[T] = proc (vars: Vars[T])
+  QueryFn[T, U] = proc (vars: Vars[T]): U
   FilterFn[T] = proc (vars: Vars[T]): bool
   # alpha network
   AlphaNode[T] = ref object
@@ -26,7 +27,7 @@ type
   MemoryNode[T] = ref object
     parent: JoinNode[T]
     children: seq[JoinNode[T]]
-    vars: seq[Vars[T]]
+    vars*: seq[Vars[T]]
     condition: Condition[T]
     case nodeType: MemoryNodeType
       of Full:
@@ -45,14 +46,16 @@ type
     nodes: seq[AlphaNode[T]]
     vars: seq[Var]
     filter: FilterFn[T]
-  Production[T] = object
+  Production*[T, U] = object
     conditions: seq[Condition[T]]
     callback: CallbackFn[T]
+    query: QueryFn[T, U]
     name: string
   Session*[T] = object
     alphaNode: AlphaNode[T]
     betaNode: MemoryNode[T]
     allFacts: Table[IdAttr, Fact[T]]
+    prodNodes*: Table[string, MemoryNode[T]]
 
 proc getParent*(node: MemoryNode): MemoryNode =
   node.parent.parent
@@ -69,7 +72,7 @@ proc addNodes(session: Session, nodes: seq[AlphaNode]): AlphaNode =
   for node in nodes:
     result = result.addNode(node)
 
-proc add*[T](production: var Production[T], id: Var or T, attr: T, value: Var or T, filter: FilterFn[T] = nil) =
+proc add*[T, U](production: var Production[T, U], id: Var or T, attr: T, value: Var or T, filter: FilterFn[T] = nil) =
   var condition = Condition[T](filter: filter)
   for fieldType in [Field.Identifier, Field.Attribute, Field.Value]:
     case fieldType:
@@ -100,7 +103,7 @@ proc isAncestor(x, y: JoinNode): bool =
       node = node.parent.parent
   false
 
-proc add*[T](session: Session[T], production: Production[T]): MemoryNode[T] =
+proc add*[T, U](session: var Session[T], production: Production[T, U]): MemoryNode[T] =
   result = session.betaNode
   let last = production.conditions.len - 1
   for i in 0 .. last:
@@ -115,6 +118,9 @@ proc add*[T](session: Session[T], production: Production[T]): MemoryNode[T] =
     var newMemNode = MemoryNode[T](parent: joinNode, nodeType: if i == last: Full else: Partial, condition: condition)
     if newMemNode.nodeType == Full:
       newMemNode.callback = production.callback
+      if session.prodNodes.hasKey(production.name):
+        raise newException(Exception, production.name & " already exists in session")
+      session.prodNodes[production.name] = newMemNode
     joinNode.children.add(newMemNode)
     result = newMemNode
 
@@ -237,9 +243,20 @@ proc newSession*[T](): Session[T] =
   result.alphaNode = new(AlphaNode[T])
   result.betaNode = new(MemoryNode[T])
 
-proc newProduction*[T](name: string, cb: CallbackFn[T]): Production[T] =
+proc newProduction*[T, U](name: string, cb: CallbackFn[T], query: QueryFn[T, U]): Production[T, U] =
   result.name = name
   result.callback = cb
+  result.query = query
+
+proc query*[T, U](session: Session[T], prod: Production[T, U]): U =
+  let vars = session.prodNodes[prod.name].vars
+  if vars.len == 0:
+    raise newException(Exception, prod.name & " is not ready to query")
+  let last = vars[vars.len - 1]
+  prod.query(last)
+
+proc isReady*(session: Session, prod: Production): bool =
+  session.prodNodes[prod.name].vars.len > 0
 
 proc print(fact: Fact, indent: int): string
 proc print[T](node: JoinNode[T], indent: int): string

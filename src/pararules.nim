@@ -2,7 +2,8 @@ import pararules/engine, tables, sets, macros, strutils
 
 const newPrefix = "new"
 const checkPrefix = "check"
-const attrPrefix = "attr"
+const attrToTypePrefix = "attrToType"
+const typeToNamePrefix = "typeToName"
 const typePrefix = "type"
 const typeEnumPrefix = "Type"
 const enumSuffix = "Kind"
@@ -39,14 +40,14 @@ proc wrap(parentNode: NimNode, dataType: NimNode, index: int): NimNode =
             `checkProc`(`attrName`, `dataNode`.kind.ord)
           `dataNode`
 
-proc createLet(vars: Table[string, VarInfo], paramNode: NimNode): NimNode =
+proc createLet(vars: OrderedTable[string, VarInfo], paramNode: NimNode): NimNode =
   result = newStmtList()
-  for (s, nums) in vars.pairs:
-    let typeField = ident(typePrefix & $nums.typeNum)
+  for (varName, varInfo) in vars.pairs:
+    let typeField = ident(typePrefix & $varInfo.typeNum)
     result.add(newLetStmt(
-      newIdentNode(s),
+      newIdentNode(varName),
       quote do:
-        `paramNode`[`s`].`typeField`
+        `paramNode`[`varName`].`typeField`
     ))
 
 proc getVarsInNode(node: NimNode): HashSet[string] =
@@ -55,7 +56,7 @@ proc getVarsInNode(node: NimNode): HashSet[string] =
   for child in node:
     result = result.union(child.getVarsInNode)
 
-proc parseCond(vars: Table[string, VarInfo], node: NimNode): Table[int, NimNode] =
+proc parseCond(vars: OrderedTable[string, VarInfo], node: NimNode): Table[int, NimNode] =
   expectKind(node, nnkStmtList)
   for condNode in node:
     var condNum = 0
@@ -69,12 +70,12 @@ proc parseCond(vars: Table[string, VarInfo], node: NimNode): Table[int, NimNode]
     else:
       result[condNum] = condNode
 
-proc getUsedVars(vars: Table[string, VarInfo], node: NimNode): Table[string, VarInfo] =
+proc getUsedVars(vars: OrderedTable[string, VarInfo], node: NimNode): OrderedTable[string, VarInfo] =
   for v in node.getVarsInNode:
     if vars.hasKey(v):
       result[v] = vars[v]
 
-proc addCond(dataType:NimNode, vars: Table[string, VarInfo], prod: NimNode, node: NimNode, filter: NimNode): NimNode =
+proc addCond(dataType: NimNode, vars: OrderedTable[string, VarInfo], prod: NimNode, node: NimNode, filter: NimNode): NimNode =
   expectKind(node, nnkPar)
   let id = node.wrap(dataType, 0)
   let attr = node.wrap(dataType, 1)
@@ -93,8 +94,8 @@ proc addCond(dataType:NimNode, vars: Table[string, VarInfo], prod: NimNode, node
     quote do:
       add(`prod`, `id`, `attr`, `value`)
 
-proc parseWhat(name: string, dataType: NimNode, attrs: Table[string, int], node: NimNode, condNode: NimNode, thenNode: NimNode): NimNode =
-  var vars: Table[string, VarInfo]
+proc parseWhat(name: string, dataType: NimNode, attrs: Table[string, int], types: seq[string], node: NimNode, condNode: NimNode, thenNode: NimNode): NimNode =
+  var vars: OrderedTable[string, VarInfo]
   for condNum in 0 ..< node.len:
     let child = node[condNum]
     expectKind(child, nnkPar)
@@ -115,22 +116,39 @@ proc parseWhat(name: string, dataType: NimNode, attrs: Table[string, int], node:
   if condNode != nil:
     conds = parseCond(vars, condNode)
 
-  let prod = genSym(nskVar, "prod")
-  let v = genSym(nskParam, "v")
+  let tupleType = newNimNode(nnkTupleTy)
+  for (varName, varInfo) in vars.pairs:
+    tupleType.add(newIdentDefs(ident(varName), ident(types[varInfo.typeNum])))
+
+  let
+    prod = genSym(nskVar, "prod")
+    v = genSym(nskParam, "v")
+    callback = genSym(nskLet, "callback")
+    v2 = genSym(nskParam, "v")
+    query = genSym(nskLet, "query")
+
+  var queryBody = newNimNode(nnkTupleConstr)
+  for (varName, varInfo) in vars.pairs:
+    let typeField = ident(typePrefix & $varInfo.typeNum)
+    queryBody.add(newNimNode(nnkExprColonExpr).add(ident(varName)).add(quote do: `v2`[`varName`].`typeField`))
 
   if thenNode != nil:
     let usedVars = getUsedVars(vars, thenNode)
     let letNode = createLet(usedVars, v)
     result = newStmtList(quote do:
-      var `prod` = newProduction[`dataType`](`name`, proc (`v`: Table[string, `dataType`]) =
+      let `callback` = proc (`v`: Table[string, `dataType`]) =
         `letNode`
         `thenNode`
-      )
+      let `query` = proc (`v2`: Table[string, `dataType`]): `tupleType` =
+        `queryBody`
+      var `prod` = newProduction[`dataType`, `tupleType`](`name`, `callback`, `query`)
     )
   else:
     result = newStmtList(quote do:
-      var `prod` = newProduction[`dataType`](`name`, proc (`v`: Table[string, `dataType`]) = discard
-      )
+      let `callback` = proc (`v`: Table[string, `dataType`]) = discard
+      let `query` = proc (`v2`: Table[string, `dataType`]): `tupleType` =
+        `queryBody`
+      var `prod` = newProduction[`dataType`, `tupleType`](`name`, `callback`, `query`)
     )
 
   for condNum in 0 ..< node.len:
@@ -138,7 +156,7 @@ proc parseWhat(name: string, dataType: NimNode, attrs: Table[string, int], node:
     result.add addCond(datatype, vars, prod, child, if conds.hasKey(condNum): conds[condNum] else: nil)
   result.add prod
 
-macro ruleWithAttrs*(sig: untyped, attrsNode: typed, body: untyped): untyped =
+macro ruleWithAttrs*(sig: untyped, attrsNode: typed, typesNode: typed, body: untyped): untyped =
   expectKind(body, nnkStmtList)
   result = newStmtList()
   var t: Table[string, NimNode]
@@ -157,6 +175,12 @@ macro ruleWithAttrs*(sig: untyped, attrsNode: typed, body: untyped): untyped =
     let val = child[1].intVal
     attrs[key] = cast[int](val)
 
+  let typesImpl = typesNode.getImpl
+  expectKind(typesImpl, nnkBracket)
+  var types: seq[string]
+  for child in typesImpl:
+    types.add(child.strVal)
+
   expectKind(sig, nnkCall)
   let name = sig[0].strVal
   let dataType = sig[1]
@@ -164,6 +188,7 @@ macro ruleWithAttrs*(sig: untyped, attrsNode: typed, body: untyped): untyped =
     name,
     dataType,
     attrs,
+    types,
     t["what"],
     if t.hasKey("cond"): t["cond"] else: nil,
     if t.hasKey("then"): t["then"] else: nil
@@ -171,9 +196,10 @@ macro ruleWithAttrs*(sig: untyped, attrsNode: typed, body: untyped): untyped =
 
 macro rule*(sig: untyped, body: untyped): untyped =
   let dataType = if sig.kind == nnkCall: sig[1] else: sig
-  let constName = ident(attrPrefix & dataType.strVal)
+  let attrToType = ident(attrToTypePrefix & dataType.strVal)
+  let typeToName = ident(typeToNamePrefix & dataType.strVal)
   quote do:
-    ruleWithAttrs(`sig`, `constName`, `body`)
+    ruleWithAttrs(`sig`, `attrToType`, `typeToName`, `body`)
 
 proc createBranch(dataType: NimNode, index: int, typ: NimNode): NimNode =
   result = newNimNode(nnkOfBranch)
@@ -326,16 +352,18 @@ proc createUpdateProcs(dataType: NimNode, types: seq[NimNode], procName: string)
   for i in 0 ..< types.len:
     result.add(createUpdateProc(dataType, types[0], types[1], types[i], i, procName))
 
-proc createAttrConstant(dataType: NimNode, attrs: Table[string, int]): NimNode =
-  let constName = ident(attrPrefix & dataType.strVal)
-  var attrTable = newNimNode(nnkTableConstr)
+proc createConstants(dataType: NimNode, types: seq[NimNode], attrs: Table[string, int]): NimNode =
+  let attrToTypeId = ident(attrToTypePrefix & dataType.strVal)
+  var attrToTypeTable = newNimNode(nnkTableConstr)
+  let typeToNameId = ident(typeToNamePrefix & dataType.strVal)
+  var typeToNameArray = newNimNode(nnkBracket)
   for (attr, typeNum) in attrs.pairs():
-    var pair = newNimNode(nnkExprColonExpr)
-    pair.add(attr.newLit)
-    pair.add(typeNum.newLit)
-    attrTable.add(pair)
+    attrToTypeTable.add(newNimNode(nnkExprColonExpr).add(attr.newLit).add(typeNum.newLit))
+  for typ in types:
+    typeToNameArray.add(typ.strVal.newLit)
   quote do:
-    const `constName`* = `attrTable`
+    const `attrToTypeId`* = `attrToTypeTable`
+    const `typeToNameId`* = `typeToNameArray`
 
 macro schema*(sig: untyped, body: untyped): untyped =
   expectKind(sig, nnkCall)
@@ -368,6 +396,6 @@ macro schema*(sig: untyped, body: untyped): untyped =
     createCheckProc(dataType, types, attrs),
     createUpdateProcs(dataType, types, "insert"),
     createUpdateProcs(dataType, types, "remove"),
-    createAttrConstant(dataType, attrs)
+    createConstants(dataType, types, attrs)
   )
 
