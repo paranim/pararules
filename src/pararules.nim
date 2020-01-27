@@ -244,11 +244,6 @@ proc createNewProc(dataType: NimNode, enumName: NimNode, index: int, typ: NimNod
     body = newStmtList(body)
   )
 
-proc createNewProcs(dataType: NimNode, enumName: NimNode, types: seq[NimNode]): NimNode =
-  result = newStmtList()
-  for i in 0 ..< types.len:
-    result.add(createNewProc(dataType, enumName, i, types[i]))
-
 proc createAttrConstant(dataType: NimNode, attrs: Table[string, int]): NimNode =
   let constName = ident(attrPrefix & dataType.strVal)
   var attrTable = newNimNode(nnkTableConstr)
@@ -259,6 +254,41 @@ proc createAttrConstant(dataType: NimNode, attrs: Table[string, int]): NimNode =
     attrTable.add(pair)
   quote do:
     const `constName`* = `attrTable`
+
+proc createNewProcs(dataType: NimNode, enumName: NimNode, types: seq[NimNode]): NimNode =
+  result = newStmtList()
+  for i in 0 ..< types.len:
+    result.add(createNewProc(dataType, enumName, i, types[i]))
+
+proc createUpdateProc(dataType: NimNode, idType: NimNode, attrType: NimNode, valueType: NimNode, procName: string): NimNode =
+  let
+    procId = ident(procName)
+    engineProcId = ident(procName & "Fact")
+    newProc = ident(newPrefix & dataType.strVal)
+    session = ident("session")
+    sessionType = newNimNode(nnkVarTy).add(ident("Session"))
+    id = ident("id")
+    attr = ident("attr")
+    value = ident("value")
+    body = quote do:
+      `engineProcId`(`session`, (`newProc`(`id`), `newProc`(`attr`), `newProc`(`value`)))
+
+  newProc(
+    name = postfix(procId, "*"),
+    params = [
+      ident("void"),
+      newIdentDefs(session, sessionType),
+      newIdentDefs(id, idType),
+      newIdentDefs(attr, attrType),
+      newIdentDefs(value, valueType)
+    ],
+    body = newStmtList(body)
+  )
+
+proc createUpdateProcs(dataType: NimNode, types: seq[NimNode], procName: string): NimNode =
+  result = newStmtList()
+  for i in 0 ..< types.len:
+    result.add(createUpdateProc(dataType, types[0], types[1], types[i], procName))
 
 macro schema*(sig: untyped, body: untyped): untyped =
   expectKind(sig, nnkCall)
@@ -288,18 +318,8 @@ macro schema*(sig: untyped, body: untyped): untyped =
     createTypes(dataType, enumName, types),
     createEqProc(dataType, types),
     createNewProcs(dataType, enumName, types),
-    createAttrConstant(dataType, attrs)
+    createAttrConstant(dataType, attrs),
+    createUpdateProcs(dataType, types, "insert"),
+    createUpdateProcs(dataType, types, "remove")
   )
 
-proc wrapWithNewProc(procName: NimNode, session: NimNode, id: NimNode, attr: NimNode, value: NimNode): NimNode =
-  let typeNode = session.getTypeImpl[2][0][1]
-  expectKind(typeNode, nnkSym)
-  let newProc = ident(newPrefix & typeNode.strVal)
-  quote do:
-    `procName`(`session`, (`newProc`(`id`), `newProc`(`attr`), `newProc`(`value`)))
-
-macro insert*(session: Session, id: untyped, attr: untyped, value: untyped): untyped =
-  wrapWithNewProc(ident("insertFact"), session, id, attr, value)
-
-macro remove*(session: Session, id: untyped, attr: untyped, value: untyped): untyped =
-  wrapWithNewProc(ident("removeFact"), session, id, attr, value)
