@@ -230,6 +230,12 @@ macro find*(session: Session, prod: Production, args: varargs[untyped]): untyped
   quote do:
     findWithParams(`session`, `prod`, `params`)
 
+macro findAll*(session: Session, prod: Production, args: varargs[untyped]): untyped =
+  let dataType = session.getDataType
+  let params = createParamsArray(dataType, args)
+  quote do:
+    findAllWithParams(`session`, `prod`, `params`)
+
 proc createBranch(dataType: NimNode, index: int, typ: NimNode): NimNode =
   result = newNimNode(nnkOfBranch)
   var list = newNimNode(nnkRecList)

@@ -220,6 +220,10 @@ test "queries":
   session.insert(Alice, LeftOf, Bob)
   session.insert(Alice, Height, 64)
 
+  session.insert(Charlie, Color, "red")
+  session.insert(Charlie, LeftOf, Alice)
+  session.insert(Charlie, Height, 72)
+
   let loc = session.find(getPerson, id = Bob)
   check loc >= 0
   let res = session.get(getPerson, loc)
@@ -227,6 +231,13 @@ test "queries":
   check res.color == "blue"
   check res.leftOf == Zach
   check res.height == 72
+
+  let locs = session.findAll(getPerson, height = 72)
+  check locs.len == 2
+  let res1 = session.get(getPerson, locs[0])
+  let res2 = session.get(getPerson, locs[1])
+  check res1.id == Bob
+  check res2.id == Charlie
 
 # this one is not used...
 # it's just here to make sure we can define

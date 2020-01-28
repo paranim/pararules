@@ -267,6 +267,12 @@ proc findWithParams*[I, T](session: Session, prod: Production, params: array[I, 
         break
       result = result - 1
 
+proc findAllWithParams*[I, T](session: Session, prod: Production, params: array[I, (string, T)]): seq[int] =
+  let vars = session.prodNodes[prod.name].vars
+  for i in 0 ..< vars.len:
+    if matches(vars[i], params):
+      result.add(i)
+
 proc get*[T, U](session: Session[T], prod: Production[T, U], i: int): U =
   prod.query(session.prodNodes[prod.name].vars[i])
 
