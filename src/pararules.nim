@@ -441,9 +441,9 @@ macro schema*(sig: untyped, body: untyped): untyped =
 # these wrapper macros are only here so
 # the engine doesn't need to be imported directly
 
-macro newSession*(dataType: type): untyped =
+macro initSession*(dataType: type): untyped =
   quote do:
-    newSession[`dataType`]()
+    initSession[`dataType`]()
 
 macro add*(session: Session, production: Production): untyped =
   quote do:

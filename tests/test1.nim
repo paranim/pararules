@@ -19,7 +19,7 @@ schema Data(Id, Attr):
   Self: Id
 
 test "number of conditions != number of facts":
-  var session = newSession(Data)
+  var session = initSession(Data)
   session.add:
     rule numCondsAndFacts(Data):
       what:
@@ -49,7 +49,7 @@ test "number of conditions != number of facts":
   check prodNode.debugFacts[0].len == 5
 
 test "adding facts out of order":
-  var session = newSession(Data)
+  var session = initSession(Data)
   session.add:
     rule outOfOrder(Data):
       what:
@@ -88,7 +88,7 @@ test "adding facts out of order":
   check prodNode.debugFacts[0].len == 10
 
 test "duplicate facts":
-  var session = newSession(Data)
+  var session = initSession(Data)
   session.add:
     rule duplicateFacts(Data):
       what:
@@ -105,7 +105,7 @@ test "duplicate facts":
   check prodNode.debugFacts[0].len == 3
 
 test "removing facts":
-  var session = newSession(Data)
+  var session = initSession(Data)
   session.add:
     rule removingFacts(Data):
       what:
@@ -132,7 +132,7 @@ test "removing facts":
   check prodNode.getParent.debugFacts.len == 0
 
 test "updating facts":
-  var session = newSession(Data)
+  var session = initSession(Data)
   var zVal: Id
   session.add:
     rule updatingFacts(Data):
@@ -158,7 +158,7 @@ test "updating facts":
   check zVal == Xavier
 
 test "updating facts in different alpha nodes":
-  var session = newSession(Data)
+  var session = initSession(Data)
   session.add:
     rule updatingFactsDiffNodes(Data):
       what:
@@ -179,7 +179,7 @@ test "updating facts in different alpha nodes":
   check prodNode.debugFacts.len == 0
 
 test "complex conditions":
-  var session = newSession(Data)
+  var session = initSession(Data)
   session.add:
     rule complexCond(Data):
       what:
@@ -209,7 +209,7 @@ test "queries":
         (id, LeftOf, leftOf)
         (id, Height, height)
 
-  var session = newSession(Data)
+  var session = initSession(Data)
   session.add(getPerson)
 
   session.insert(Bob, Color, "blue")

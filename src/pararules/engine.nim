@@ -241,7 +241,7 @@ proc insertFact*[T](session: var Session[T], fact: Fact[T]) =
 proc removeFact*[T](session: Session[T], fact: Fact[T]) =
   discard session.alphaNode.insertFact(fact, true, false)
 
-proc newSession*[T](): Session[T] =
+proc initSession*[T](): Session[T] =
   result.alphaNode = new(AlphaNode[T])
   result.betaNode = new(MemoryNode[T])
 
