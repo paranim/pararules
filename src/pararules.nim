@@ -219,7 +219,7 @@ proc createParamsArray(dataType: NimNode, args: NimNode): NimNode =
   result = newNimNode(nnkTableConstr)
   let newProc = ident(newPrefix & dataType.strVal)
   for arg in args:
-    expectKind(arg, nnkExprColonExpr)
+    expectKind(arg, nnkExprEqExpr)
     let name = arg[0].strVal.newLit
     let val = arg[1]
     result.add(newNimNode(nnkExprColonExpr).add(name).add(quote do: `newProc`(`val`)))

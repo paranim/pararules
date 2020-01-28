@@ -220,7 +220,7 @@ test "queries":
   session.insert(Alice, LeftOf, Bob)
   session.insert(Alice, Height, 64)
 
-  let loc = session.find(getPerson, id: Bob)
+  let loc = session.find(getPerson, id = Bob)
   check loc >= 0
   let res = session.get(getPerson, loc)
   check res.id == Bob
