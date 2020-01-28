@@ -1,5 +1,6 @@
 import unittest
-import pararules, pararules/engine
+import pararules
+from pararules/engine import getParent
 import tables
 
 type
@@ -18,7 +19,8 @@ schema Data(Id, Attr):
   Self: Id
 
 test "number of conditions != number of facts":
-  let prod =
+  var session = newSession(Data)
+  session.add:
     rule numCondsAndFacts(Data):
       what:
         (b, Color, "blue")
@@ -32,8 +34,6 @@ test "number of conditions != number of facts":
         check y == Yair
         check z == Zach
 
-  var session = newSession[Data]()
-  session.add(prod)
   let prodNode = session.prodNodes["numCondsAndFacts"]
 
   session.insert(Bob, Color, "blue")
@@ -49,7 +49,8 @@ test "number of conditions != number of facts":
   check prodNode.debugFacts[0].len == 5
 
 test "adding facts out of order":
-  let prod =
+  var session = newSession(Data)
+  session.add:
     rule outOfOrder(Data):
       what:
         (x, RightOf, y)
@@ -68,8 +69,6 @@ test "adding facts out of order":
         check y == Yair
         check z == Zach
 
-  var session = newSession[Data]()
-  session.add(prod)
   let prodNode = session.prodNodes["outOfOrder"]
 
   session.insert(Xavier, RightOf, Yair)
@@ -89,15 +88,14 @@ test "adding facts out of order":
   check prodNode.debugFacts[0].len == 10
 
 test "duplicate facts":
-  let prod =
+  var session = newSession(Data)
+  session.add:
     rule duplicateFacts(Data):
       what:
         (x, Self, y)
         (x, Color, "red")
         (y, Color, "red")
 
-  var session = newSession[Data]()
-  session.add(prod)
   let prodNode = session.prodNodes["duplicateFacts"]
 
   session.insert(Bob, Self, Bob)
@@ -107,7 +105,8 @@ test "duplicate facts":
   check prodNode.debugFacts[0].len == 3
 
 test "removing facts":
-  let prod =
+  var session = newSession(Data)
+  session.add:
     rule removingFacts(Data):
       what:
         (b, Color, "blue")
@@ -115,8 +114,6 @@ test "removing facts":
         (a, Color, "maize")
         (y, RightOf, b)
 
-  var session = newSession[Data]()
-  session.add(prod)
   let prodNode = session.prodNodes["removingFacts"]
 
   session.insert(Bob, Color, "blue")
@@ -135,9 +132,9 @@ test "removing facts":
   check prodNode.getParent.debugFacts.len == 0
 
 test "updating facts":
+  var session = newSession(Data)
   var zVal: Id
-
-  let prod =
+  session.add:
     rule updatingFacts(Data):
       what:
         (b, Color, "blue")
@@ -147,8 +144,6 @@ test "updating facts":
       then:
         zVal = z
 
-  var session = newSession[Data]()
-  session.add(prod)
   let prodNode = session.prodNodes["updatingFacts"]
 
   session.insert(Bob, Color, "blue")
@@ -163,7 +158,8 @@ test "updating facts":
   check zVal == Xavier
 
 test "updating facts in different alpha nodes":
-  let prod =
+  var session = newSession(Data)
+  session.add:
     rule updatingFactsDiffNodes(Data):
       what:
         (b, Color, "blue")
@@ -171,8 +167,6 @@ test "updating facts in different alpha nodes":
         (a, Color, "maize")
         (y, RightOf, b)
 
-  var session = newSession[Data]()
-  session.add(prod)
   let prodNode = session.prodNodes["updatingFactsDiffNodes"]
 
   session.insert(Bob, Color, "blue")
@@ -185,7 +179,8 @@ test "updating facts in different alpha nodes":
   check prodNode.debugFacts.len == 0
 
 test "complex conditions":
-  let prod =
+  var session = newSession(Data)
+  session.add:
     rule complexCond(Data):
       what:
         (b, Color, "blue")
@@ -195,8 +190,6 @@ test "complex conditions":
       cond:
         z != Zach
 
-  var session = newSession[Data]()
-  session.add(prod)
   let prodNode = session.prodNodes["complexCond"]
 
   session.insert(Bob, Color, "blue")
@@ -209,15 +202,15 @@ test "complex conditions":
   check prodNode.debugFacts.len == 1
 
 test "queries":
-  let prod =
+  let getPerson =
     rule getPerson(Data):
       what:
         (id, Color, color)
         (id, LeftOf, leftOf)
         (id, Height, height)
 
-  var session = newSession[Data]()
-  session.add(prod)
+  var session = newSession(Data)
+  session.add(getPerson)
 
   session.insert(Bob, Color, "blue")
   session.insert(Bob, LeftOf, Zach)
@@ -227,9 +220,9 @@ test "queries":
   session.insert(Alice, LeftOf, Bob)
   session.insert(Alice, Height, 64)
 
-  let loc = session.find(prod, id: Bob)
+  let loc = session.find(getPerson, id: Bob)
   check loc >= 0
-  let res = session.get(prod, loc)
+  let res = session.get(getPerson, loc)
   check res.id == Bob
   check res.color == "blue"
   check res.leftOf == Zach

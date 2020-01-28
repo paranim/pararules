@@ -345,13 +345,17 @@ proc createCheckProc(dataType: NimNode, types: seq[NimNode], attrs: Table[string
 proc createUpdateProc(dataType: NimNode, idType: NimNode, attrType: NimNode, valueType: NimNode, valueTypeNum: int, procName: string): NimNode =
   let
     procId = ident(procName)
-    engineProcId = ident(procName & "Fact")
+    engineProcId = block:
+      if procName == "insert":
+        bindSym("insertFact")
+      else:
+        bindSym("removeFact")
     checkProcId = ident(checkPrefix & dataType.strVal)
     newProc = ident(newPrefix & dataType.strVal)
     session = ident("session")
     sessionType = newNimNode(nnkVarTy).add(block:
       var node = newNimNode(nnkBracketExpr)
-      node.add(ident("Session"))
+      node.add(bindSym("Session"))
       node.add(dataType)
       node
     )
@@ -427,4 +431,19 @@ macro schema*(sig: untyped, body: untyped): untyped =
     createUpdateProcs(dataType, types, "remove"),
     createConstants(dataType, types, attrs)
   )
+
+# these wrapper macros are only here so
+# the engine doesn't need to be imported directly
+
+macro newSession*(dataType: type): untyped =
+  quote do:
+    newSession[`dataType`]()
+
+macro add*(session: Session, production: Production): untyped =
+  quote do:
+    add(`session`, `production`)
+
+macro get*(session: Session, production: Production, index: int): untyped =
+  quote do:
+    get(`session`, `production`, `index`)
 

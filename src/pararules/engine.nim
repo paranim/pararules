@@ -227,6 +227,8 @@ proc insertFact(node: AlphaNode, fact: Fact, root: bool, insert: bool): bool =
   node.rightActivation((fact, insert))
   true
 
+proc removeFact*[T](session: Session[T], fact: Fact[T])
+
 proc insertFact*[T](session: var Session[T], fact: Fact[T]) =
   let id = fact.id.type0.ord
   let attr = fact.attr.type1.ord
