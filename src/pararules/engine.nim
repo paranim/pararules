@@ -266,10 +266,7 @@ proc findWithParams*[I, T](session: Session, prod: Production, params: array[I, 
       result = result - 1
 
 proc get*[T, U](session: Session[T], prod: Production[T, U], i: int): U =
-  let vars = session.prodNodes[prod.name].vars
-  if i == -1:
-    raise newException(Exception, prod.name & " is not ready to query")
-  prod.query(vars[i])
+  prod.query(session.prodNodes[prod.name].vars[i])
 
 proc print(fact: Fact, indent: int): string
 proc print[T](node: JoinNode[T], indent: int): string
