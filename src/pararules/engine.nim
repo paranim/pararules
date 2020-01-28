@@ -248,15 +248,28 @@ proc newProduction*[T, U](name: string, cb: CallbackFn[T], query: QueryFn[T, U])
   result.callback = cb
   result.query = query
 
-proc query*[T, U](session: Session[T], prod: Production[T, U]): U =
+proc matches[I, T](vars: Vars[T], params: array[I, (string, T)]): bool =
+  for (varName, val) in params:
+    if vars[varname] != val:
+      return false
+  true
+
+proc findWithParams*[I, T](session: Session, prod: Production, params: array[I, (string, T)]): int =
   let vars = session.prodNodes[prod.name].vars
   if vars.len == 0:
-    raise newException(Exception, prod.name & " is not ready to query")
-  let last = vars[vars.len - 1]
-  prod.query(last)
+    return -1
+  result = vars.len - 1
+  if params.len > 0:
+    while result >= 0:
+      if matches(vars[result], params):
+        break
+      result = result - 1
 
-proc isReady*(session: Session, prod: Production): bool =
-  session.prodNodes[prod.name].vars.len > 0
+proc get*[T, U](session: Session[T], prod: Production[T, U], i: int): U =
+  let vars = session.prodNodes[prod.name].vars
+  if i == -1:
+    raise newException(Exception, prod.name & " is not ready to query")
+  prod.query(vars[i])
 
 proc print(fact: Fact, indent: int): string
 proc print[T](node: JoinNode[T], indent: int): string

@@ -196,20 +196,27 @@ test "complex conditions":
 
 test "queries":
   let prod =
-    rule getBob(Data):
+    rule getPerson(Data):
       what:
-        (Bob, Color, color)
-        (Bob, LeftOf, leftOf)
-        (Bob, Height, height)
+        (id, Color, color)
+        (id, LeftOf, leftOf)
+        (id, Height, height)
 
   var session = newSession[Data]()
-  let prodNode = session.add(prod)
+  discard session.add(prod)
+
   session.insert(Bob, Color, "blue")
   session.insert(Bob, LeftOf, Zach)
   session.insert(Bob, Height, 72)
 
-  check session.isReady(prod) == true
-  let res = session.query(prod)
+  session.insert(Alice, Color, "green")
+  session.insert(Alice, LeftOf, Bob)
+  session.insert(Alice, Height, 64)
+
+  let loc = session.find(prod, id: Bob)
+  check loc >= 0
+  let res = session.get(prod, loc)
+  check res.id == Bob
   check res.color == "blue"
   check res.leftOf == Zach
   check res.height == 72

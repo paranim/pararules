@@ -195,11 +195,40 @@ macro ruleWithAttrs*(sig: untyped, attrsNode: typed, typesNode: typed, body: unt
   )
 
 macro rule*(sig: untyped, body: untyped): untyped =
-  let dataType = if sig.kind == nnkCall: sig[1] else: sig
+  expectKind(sig, nnkCall)
+  let dataType = sig[1]
   let attrToType = ident(attrToTypePrefix & dataType.strVal)
   let typeToName = ident(typeToNamePrefix & dataType.strVal)
   quote do:
     ruleWithAttrs(`sig`, `attrToType`, `typeToName`, `body`)
+
+proc getDataType(session: NimNode): NimNode =
+  let impl = session.getTypeImpl
+  expectKind(impl, nnkObjectTy)
+  let recList = impl[2]
+  expectKind(recList, nnkRecList)
+  let alphaNode = recList[0]
+  expectKind(alphaNode, nnkIdentDefs)
+  let bracketExpr = alphaNode[1]
+  expectKind(bracketExpr, nnkBracketExpr)
+  let typ = bracketExpr[1]
+  expectKind(typ, nnkSym)
+  typ
+
+proc createParamsArray(dataType: NimNode, args: NimNode): NimNode =
+  result = newNimNode(nnkTableConstr)
+  let newProc = ident(newPrefix & dataType.strVal)
+  for arg in args:
+    expectKind(arg, nnkExprColonExpr)
+    let name = arg[0].strVal.newLit
+    let val = arg[1]
+    result.add(newNimNode(nnkExprColonExpr).add(name).add(quote do: `newProc`(`val`)))
+
+macro find*(session: Session, prod: Production, args: varargs[untyped]): untyped =
+  let dataType = session.getDataType
+  let params = createParamsArray(dataType, args)
+  quote do:
+    findWithParams(`session`, `prod`, `params`)
 
 proc createBranch(dataType: NimNode, index: int, typ: NimNode): NimNode =
   result = newNimNode(nnkOfBranch)
