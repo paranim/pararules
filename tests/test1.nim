@@ -33,7 +33,9 @@ test "number of conditions != number of facts":
         check z == Zach
 
   var session = newSession[Data]()
-  let prodNode = session.add(prod)
+  session.add(prod)
+  let prodNode = session.prodNodes["numCondsAndFacts"]
+
   session.insert(Bob, Color, "blue")
   session.insert(Yair, LeftOf, Zach)
   session.insert(Alice, Color, "maize")
@@ -67,7 +69,9 @@ test "adding facts out of order":
         check z == Zach
 
   var session = newSession[Data]()
-  let prodNode = session.add(prod)
+  session.add(prod)
+  let prodNode = session.prodNodes["outOfOrder"]
+
   session.insert(Xavier, RightOf, Yair)
   session.insert(Yair, LeftOf, Zach)
   session.insert(Zach, Color, "red")
@@ -93,7 +97,9 @@ test "duplicate facts":
         (y, Color, "red")
 
   var session = newSession[Data]()
-  let prodNode = session.add(prod)
+  session.add(prod)
+  let prodNode = session.prodNodes["duplicateFacts"]
+
   session.insert(Bob, Self, Bob)
   session.insert(Bob, Color, "red")
 
@@ -110,7 +116,9 @@ test "removing facts":
         (y, RightOf, b)
 
   var session = newSession[Data]()
-  let prodNode = session.add(prod)
+  session.add(prod)
+  let prodNode = session.prodNodes["removingFacts"]
+
   session.insert(Bob, Color, "blue")
   session.insert(Yair, LeftOf, Zach)
   session.insert(Alice, Color, "maize")
@@ -140,7 +148,9 @@ test "updating facts":
         zVal = z
 
   var session = newSession[Data]()
-  let prodNode = session.add(prod)
+  session.add(prod)
+  let prodNode = session.prodNodes["updatingFacts"]
+
   session.insert(Bob, Color, "blue")
   session.insert(Yair, LeftOf, Zach)
   session.insert(Alice, Color, "maize")
@@ -162,7 +172,9 @@ test "updating facts in different alpha nodes":
         (y, RightOf, b)
 
   var session = newSession[Data]()
-  let prodNode = session.add(prod)
+  session.add(prod)
+  let prodNode = session.prodNodes["updatingFactsDiffNodes"]
+
   session.insert(Bob, Color, "blue")
   session.insert(Yair, LeftOf, Zach)
   session.insert(Alice, Color, "maize")
@@ -184,7 +196,9 @@ test "complex conditions":
         z != Zach
 
   var session = newSession[Data]()
-  let prodNode = session.add(prod)
+  session.add(prod)
+  let prodNode = session.prodNodes["complexCond"]
+
   session.insert(Bob, Color, "blue")
   session.insert(Yair, LeftOf, Zach)
   session.insert(Alice, Color, "maize")
@@ -203,7 +217,7 @@ test "queries":
         (id, Height, height)
 
   var session = newSession[Data]()
-  discard session.add(prod)
+  session.add(prod)
 
   session.insert(Bob, Color, "blue")
   session.insert(Bob, LeftOf, Zach)

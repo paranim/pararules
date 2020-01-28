@@ -103,14 +103,14 @@ proc isAncestor(x, y: JoinNode): bool =
       node = node.parent.parent
   false
 
-proc add*[T, U](session: var Session[T], production: Production[T, U]): MemoryNode[T] =
-  result = session.betaNode
+proc add*[T, U](session: var Session[T], production: Production[T, U]) =
+  var memNode = session.betaNode
   let last = production.conditions.len - 1
   for i in 0 .. last:
     var condition = production.conditions[i]
     var leafNode = session.addNodes(condition.nodes)
-    var joinNode = JoinNode[T](parent: result, alphaNode: leafNode, condition: condition)
-    result.children.add(joinNode)
+    var joinNode = JoinNode[T](parent: memNode, alphaNode: leafNode, condition: condition)
+    memNode.children.add(joinNode)
     leafNode.successors.add(joinNode)
     # successors must be sorted by ancestry (descendents first) to avoid duplicate rule firings
     leafNode.successors.sort(proc (x, y: JoinNode[T]): int =
@@ -122,7 +122,7 @@ proc add*[T, U](session: var Session[T], production: Production[T, U]): MemoryNo
         raise newException(Exception, production.name & " already exists in session")
       session.prodNodes[production.name] = newMemNode
     joinNode.children.add(newMemNode)
-    result = newMemNode
+    memNode = newMemNode
 
 proc getVarsFromFact[T](vars: var Vars[T], condition: Condition[T], fact: Fact[T]): bool =
   for v in condition.vars:
