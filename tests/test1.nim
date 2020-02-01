@@ -10,7 +10,7 @@ type
   Attr = enum
     Color, LeftOf, RightOf, Height, On, Self
 
-schema Data(Id, Attr):
+schema Fact(Id, Attr):
   Color: string
   LeftOf: Id
   RightOf: Id
@@ -19,9 +19,9 @@ schema Data(Id, Attr):
   Self: Id
 
 test "number of conditions != number of facts":
-  var session = newSession(Data)
+  var session = newSession(Fact)
   session.add:
-    rule numCondsAndFacts(Data):
+    rule numCondsAndFacts(Fact):
       what:
         (b, Color, "blue")
         (y, LeftOf, z)
@@ -49,9 +49,9 @@ test "number of conditions != number of facts":
   check prodNode.debugFacts[0].len == 5
 
 test "adding facts out of order":
-  var session = newSession(Data)
+  var session = newSession(Fact)
   session.add:
-    rule outOfOrder(Data):
+    rule outOfOrder(Fact):
       what:
         (x, RightOf, y)
         (y, LeftOf, z)
@@ -88,9 +88,9 @@ test "adding facts out of order":
   check prodNode.debugFacts[0].len == 10
 
 test "duplicate facts":
-  var session = newSession(Data)
+  var session = newSession(Fact)
   session.add:
-    rule duplicateFacts(Data):
+    rule duplicateFacts(Fact):
       what:
         (x, Self, y)
         (x, Color, "red")
@@ -105,9 +105,9 @@ test "duplicate facts":
   check prodNode.debugFacts[0].len == 3
 
 test "removing facts":
-  var session = newSession(Data)
+  var session = newSession(Fact)
   session.add:
-    rule removingFacts(Data):
+    rule removingFacts(Fact):
       what:
         (b, Color, "blue")
         (y, LeftOf, z)
@@ -132,10 +132,10 @@ test "removing facts":
   check prodNode.getParent.debugFacts.len == 0
 
 test "updating facts":
-  var session = newSession(Data)
+  var session = newSession(Fact)
   var zVal: Id
   session.add:
-    rule updatingFacts(Data):
+    rule updatingFacts(Fact):
       what:
         (b, Color, "blue")
         (y, LeftOf, z)
@@ -158,9 +158,9 @@ test "updating facts":
   check zVal == Xavier
 
 test "updating facts in different alpha nodes":
-  var session = newSession(Data)
+  var session = newSession(Fact)
   session.add:
-    rule updatingFactsDiffNodes(Data):
+    rule updatingFactsDiffNodes(Fact):
       what:
         (b, Color, "blue")
         (y, LeftOf, Zach)
@@ -179,9 +179,9 @@ test "updating facts in different alpha nodes":
   check prodNode.debugFacts.len == 0
 
 test "complex conditions":
-  var session = newSession(Data)
+  var session = newSession(Fact)
   session.add:
-    rule complexCond(Data):
+    rule complexCond(Fact):
       what:
         (b, Color, "blue")
         (y, LeftOf, z)
@@ -203,13 +203,13 @@ test "complex conditions":
 
 test "queries":
   let getPerson =
-    rule getPerson(Data):
+    rule getPerson(Fact):
       what:
         (id, Color, color)
         (id, LeftOf, leftOf)
         (id, Height, height)
 
-  var session = newSession(Data)
+  var session = newSession(Fact)
   session.add(getPerson)
 
   session.insert(Bob, Color, "blue")
@@ -242,14 +242,14 @@ test "queries":
 test "creating a ruleset":
   let rules =
     ruleset:
-      rule bob(Data):
+      rule bob(Fact):
         what:
           (b, Color, "blue")
           (b, RightOf, a)
         then:
           check a == Alice
           check b == Bob
-      rule alice(Data):
+      rule alice(Fact):
         what:
           (a, Color, "red")
           (a, LeftOf, b)
@@ -257,7 +257,7 @@ test "creating a ruleset":
           check a == Alice
           check b == Bob
 
-  var session = newSession(Data)
+  var session = newSession(Fact)
   for r in rules.fields:
     session.add(r)
 
