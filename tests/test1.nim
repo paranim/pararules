@@ -239,6 +239,39 @@ test "queries":
   check res1.id == Bob
   check res2.id == Charlie
 
+test "creating a ruleset":
+  let rules =
+    ruleset:
+      rule bob(Data):
+        what:
+          (b, Color, "blue")
+          (b, RightOf, a)
+        then:
+          check a == Alice
+          check b == Bob
+      rule alice(Data):
+        what:
+          (a, Color, "red")
+          (a, LeftOf, b)
+        then:
+          check a == Alice
+          check b == Bob
+
+  var session = newSession(Data)
+  for r in rules.fields:
+    session.add(r)
+
+  let bobNode = session.prodNodes["bob"]
+  let aliceNode = session.prodNodes["alice"]
+
+  session.insert(Bob, Color, "blue")
+  session.insert(Bob, RightOf, Alice)
+  session.insert(Alice, Color, "red")
+  session.insert(Alice, LeftOf, Bob)
+
+  check bobNode.debugFacts.len == 1
+  check aliceNode.debugFacts.len == 1
+
 # this one is not used...
 # it's just here to make sure we can define
 # multiple schemas in one module

@@ -203,6 +203,21 @@ macro rule*(sig: untyped, body: untyped): untyped =
   quote do:
     ruleWithAttrs(`sig`, `attrToType`, `typeToName`, `body`)
 
+proc getRuleName(rule: NimNode): string =
+  expectKind(rule, nnkCommand)
+  let call = rule[1]
+  expectKind(call, nnkCall)
+  let id = call[0]
+  expectKind(id, nnkIdent)
+  id.strVal
+
+macro ruleset*(rules: untyped): untyped =
+  expectKind(rules, nnkStmtList)
+  result = newNimNode(nnkTupleConstr)
+  for r in rules:
+    let name = r.getRuleName
+    result.add(newNimNode(nnkExprColonExpr).add(ident(name)).add(r))
+
 proc getDataType(prod: NimNode): NimNode =
   let impl = prod.getTypeImpl
   expectKind(impl, nnkObjectTy)
