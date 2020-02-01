@@ -104,7 +104,7 @@ proc isAncestor(x, y: JoinNode): bool =
       node = node.parent.parent
   false
 
-proc add*[T, U](session: var Session[T], production: Production[T, U]) =
+proc add*[T, U](session: Session[T], production: Production[T, U]) =
   var memNode = session.betaNode
   let last = production.conditions.len - 1
   for i in 0 .. last:
@@ -231,7 +231,7 @@ proc insertFact(node: AlphaNode, fact: Fact, root: bool, insert: bool): bool =
 
 proc removeFact*[T](session: Session[T], fact: Fact[T])
 
-proc insertFact*[T](session: var Session[T], fact: Fact[T]) =
+proc insertFact*[T](session: Session[T], fact: Fact[T]) =
   let id = fact.id.type0.ord
   let attr = fact.attr.type1.ord
   let idAttr = (id, attr)
