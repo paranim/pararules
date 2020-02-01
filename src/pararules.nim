@@ -1,6 +1,6 @@
 import pararules/engine, tables, sets, macros, strutils
 
-const newPrefix = "new"
+const initPrefix = "init"
 const checkPrefix = "check"
 const attrToTypePrefix = "attrToType"
 const typeToNamePrefix = "typeToName"
@@ -32,7 +32,7 @@ proc wrap(parentNode: NimNode, dataType: NimNode, index: int): NimNode =
         let
           dataNode = genSym(nskLet, "node")
           checkProc = ident(checkPrefix & dataType.strVal)
-          newProc = ident(newPrefix & dataType.strVal)
+          newProc = ident(initPrefix & dataType.strVal)
           attrName = ident(parentNode[1].strVal)
         quote do:
           let `dataNode` = `newProc`(`node`)
@@ -233,7 +233,7 @@ proc getDataType(prod: NimNode): NimNode =
 
 proc createParamsArray(dataType: NimNode, args: NimNode): NimNode =
   result = newNimNode(nnkTableConstr)
-  let newProc = ident(newPrefix & dataType.strVal)
+  let newProc = ident(initPrefix & dataType.strVal)
   for arg in args:
     expectKind(arg, nnkExprEqExpr)
     let name = arg[0].strVal.newLit
@@ -323,7 +323,7 @@ proc createNewProc(dataType: NimNode, enumName: NimNode, index: int, typ: NimNod
     `dataType`(kind: `enumChoice`, `id`: `x`)
 
   newProc(
-    name = postfix(ident(newPrefix & dataType.strVal), "*"),
+    name = postfix(ident(initPrefix & dataType.strVal), "*"),
     params = [
       dataType,
       newIdentDefs(x, typ)
@@ -373,7 +373,7 @@ proc createUpdateProc(dataType: NimNode, idType: NimNode, attrType: NimNode, val
       else:
         bindSym("removeFact")
     checkProcId = ident(checkPrefix & dataType.strVal)
-    newProc = ident(newPrefix & dataType.strVal)
+    newProc = ident(initPrefix & dataType.strVal)
     session = ident("session")
     sessionType = newNimNode(nnkVarTy).add(block:
       var node = newNimNode(nnkBracketExpr)
