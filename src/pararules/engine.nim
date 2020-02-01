@@ -259,22 +259,32 @@ proc matches[I, T](vars: Vars[T], params: array[I, (string, T)]): bool =
       return false
   true
 
-proc findWithParams*[I, T](session: Session, prod: Production, params: array[I, (string, T)]): int =
+proc findIndex*[I, T](session: Session, prod: Production, params: array[I, (string, T)]): int =
   let vars = session.prodNodes[prod.name].vars
   if vars.len == 0:
     return -1
   result = vars.len - 1
-  if params.len > 0:
-    while result >= 0:
-      if matches(vars[result], params):
-        break
-      result = result - 1
+  while result >= 0:
+    if matches(vars[result], params):
+      break
+    result = result - 1
 
-proc findAllWithParams*[I, T](session: Session, prod: Production, params: array[I, (string, T)]): seq[int] =
+proc findIndex*(session: Session, prod: Production): int =
+  let vars = session.prodNodes[prod.name].vars
+  if vars.len == 0:
+    return -1
+  result = vars.len - 1
+
+proc findAllIndices*[I, T](session: Session, prod: Production, params: array[I, (string, T)]): seq[int] =
   let vars = session.prodNodes[prod.name].vars
   for i in 0 ..< vars.len:
     if matches(vars[i], params):
       result.add(i)
+
+proc findAllIndices*(session: Session, prod: Production): seq[int] =
+  let vars = session.prodNodes[prod.name].vars
+  for i in 0 ..< vars.len:
+    result.add(i)
 
 proc get*[T, U](session: Session[T], prod: Production[T, U], i: int): U =
   prod.query(session.prodNodes[prod.name].vars[i])

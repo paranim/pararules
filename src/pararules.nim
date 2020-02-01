@@ -242,15 +242,23 @@ proc createParamsArray(dataType: NimNode, args: NimNode): NimNode =
 
 macro find*(session: Session, prod: Production, args: varargs[untyped]): untyped =
   let dataType = prod.getDataType
-  let params = createParamsArray(dataType, args)
-  quote do:
-    findWithParams(`session`, `prod`, `params`)
+  if args.len > 0:
+    let params = createParamsArray(dataType, args)
+    quote do:
+      findIndex(`session`, `prod`, `params`)
+  else:
+    quote do:
+      findIndex(`session`, `prod`)
 
 macro findAll*(session: Session, prod: Production, args: varargs[untyped]): untyped =
   let dataType = prod.getDataType
-  let params = createParamsArray(dataType, args)
-  quote do:
-    findAllWithParams(`session`, `prod`, `params`)
+  if args.len > 0:
+    let params = createParamsArray(dataType, args)
+    quote do:
+      findAllIndices(`session`, `prod`, `params`)
+  else:
+    quote do:
+      findAllIndices(`session`, `prod`)
 
 proc createBranch(dataType: NimNode, index: int, typ: NimNode): NimNode =
   result = newNimNode(nnkOfBranch)
