@@ -48,11 +48,11 @@ type
     vars: seq[Var]
     filter: FilterFn[T]
   Production*[T, U] = object
-    conditions: seq[Condition[T]]
     callback: SessionCallbackFn[T]
+    conditions: seq[Condition[T]]
     query: QueryFn[T, U]
     name: string
-  Session*[T] = object
+  Session*[T] = ref object
     alphaNode: AlphaNode[T]
     betaNode: MemoryNode[T]
     allFacts: Table[IdAttr, Fact[T]]
@@ -243,7 +243,8 @@ proc insertFact*[T](session: var Session[T], fact: Fact[T]) =
 proc removeFact*[T](session: Session[T], fact: Fact[T]) =
   discard session.alphaNode.insertFact(fact, true, false)
 
-proc initSession*[T](): Session[T] =
+proc newSession*[T](): Session[T] =
+  new(result)
   result.alphaNode = new(AlphaNode[T])
   result.betaNode = new(MemoryNode[T])
 

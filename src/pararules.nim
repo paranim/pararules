@@ -203,8 +203,8 @@ macro rule*(sig: untyped, body: untyped): untyped =
   quote do:
     ruleWithAttrs(`sig`, `attrToType`, `typeToName`, `body`)
 
-proc getDataType(session: NimNode): NimNode =
-  let impl = session.getTypeImpl
+proc getDataType(prod: NimNode): NimNode =
+  let impl = prod.getTypeImpl
   expectKind(impl, nnkObjectTy)
   let recList = impl[2]
   expectKind(recList, nnkRecList)
@@ -226,13 +226,13 @@ proc createParamsArray(dataType: NimNode, args: NimNode): NimNode =
     result.add(newNimNode(nnkExprColonExpr).add(name).add(quote do: `newProc`(`val`)))
 
 macro find*(session: Session, prod: Production, args: varargs[untyped]): untyped =
-  let dataType = session.getDataType
+  let dataType = prod.getDataType
   let params = createParamsArray(dataType, args)
   quote do:
     findWithParams(`session`, `prod`, `params`)
 
 macro findAll*(session: Session, prod: Production, args: varargs[untyped]): untyped =
-  let dataType = session.getDataType
+  let dataType = prod.getDataType
   let params = createParamsArray(dataType, args)
   quote do:
     findAllWithParams(`session`, `prod`, `params`)
@@ -442,9 +442,9 @@ macro schema*(sig: untyped, body: untyped): untyped =
 # these wrapper macros are only here so
 # the engine doesn't need to be imported directly
 
-macro initSession*(dataType: type): untyped =
+macro newSession*(dataType: type): untyped =
   quote do:
-    initSession[`dataType`]()
+    newSession[`dataType`]()
 
 macro add*(session: Session, production: Production): untyped =
   quote do:
