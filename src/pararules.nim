@@ -126,6 +126,7 @@ proc parseWhat(name: string, dataType: NimNode, attrs: Table[string, int], types
     callback = genSym(nskLet, "callback")
     v2 = genSym(nskParam, "v")
     query = genSym(nskLet, "query")
+    session = ident("session")
 
   var queryBody = newNimNode(nnkTupleConstr)
   for (varName, varInfo) in vars.pairs:
@@ -136,7 +137,7 @@ proc parseWhat(name: string, dataType: NimNode, attrs: Table[string, int], types
     let usedVars = getUsedVars(vars, thenNode)
     let letNode = createLet(usedVars, v)
     result = newStmtList(quote do:
-      let `callback` = proc (`v`: Table[string, `dataType`]) =
+      let `callback` = proc (`session`: Session[`dataType`], `v`: Table[string, `dataType`]) =
         `letNode`
         `thenNode`
       let `query` = proc (`v2`: Table[string, `dataType`]): `tupleType` =
@@ -145,7 +146,7 @@ proc parseWhat(name: string, dataType: NimNode, attrs: Table[string, int], types
     )
   else:
     result = newStmtList(quote do:
-      let `callback` = proc (`v`: Table[string, `dataType`]) = discard
+      let `callback` = proc (`session`: Session[`dataType`], `v`: Table[string, `dataType`]) = discard
       let `query` = proc (`v2`: Table[string, `dataType`]): `tupleType` =
         `queryBody`
       var `prod` = newProduction[`dataType`, `tupleType`](`name`, `callback`, `query`)

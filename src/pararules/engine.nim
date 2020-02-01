@@ -12,6 +12,7 @@ type
     name*: string
     field: Field
   CallbackFn[T] = proc (vars: Vars[T])
+  SessionCallbackFn[T] = proc (session: Session[T], vars: Vars[T])
   QueryFn[T, U] = proc (vars: Vars[T]): U
   FilterFn[T] = proc (vars: Vars[T]): bool
   # alpha network
@@ -48,7 +49,7 @@ type
     filter: FilterFn[T]
   Production*[T, U] = object
     conditions: seq[Condition[T]]
-    callback: CallbackFn[T]
+    callback: SessionCallbackFn[T]
     query: QueryFn[T, U]
     name: string
   Session*[T] = object
@@ -117,7 +118,8 @@ proc add*[T, U](session: var Session[T], production: Production[T, U]) =
       if isAncestor(x, y): 1 else: -1)
     var newMemNode = MemoryNode[T](parent: joinNode, nodeType: if i == last: Full else: Partial, condition: condition)
     if newMemNode.nodeType == Full:
-      newMemNode.callback = production.callback
+      let sess = session
+      newMemNode.callback = proc (vars: Vars[T]) = production.callback(sess, vars)
       if session.prodNodes.hasKey(production.name):
         raise newException(Exception, production.name & " already exists in session")
       session.prodNodes[production.name] = newMemNode
@@ -245,7 +247,7 @@ proc initSession*[T](): Session[T] =
   result.alphaNode = new(AlphaNode[T])
   result.betaNode = new(MemoryNode[T])
 
-proc newProduction*[T, U](name: string, cb: CallbackFn[T], query: QueryFn[T, U]): Production[T, U] =
+proc newProduction*[T, U](name: string, cb: SessionCallbackFn[T], query: QueryFn[T, U]): Production[T, U] =
   result.name = name
   result.callback = cb
   result.query = query
