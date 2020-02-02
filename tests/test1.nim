@@ -272,6 +272,24 @@ test "creating a ruleset":
   check bobNode.debugFacts.len == 1
   check aliceNode.debugFacts.len == 1
 
+test "don't trigger rule when updating certain facts":
+  var count = 0
+
+  var session = newSession(Fact)
+  session.add:
+    rule dontTrigger(Fact):
+      what:
+        (b, Color, "blue")
+        (a, Color, c, false)
+      then:
+        count += 1
+
+  session.insert(Bob, Color, "blue")
+  session.insert(Alice, Color, "red")
+  session.insert(Alice, Color, "maize")
+
+  check count == 1
+
 # this one is not used...
 # it's just here to make sure we can define
 # multiple schemas in one module

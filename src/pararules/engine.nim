@@ -5,7 +5,7 @@ type
   Field* = enum
     Identifier, Attribute, Value
   Fact[T] = tuple[id: T, attr: T, value: T]
-  Token[T] = tuple[fact: Fact[T], insert: bool]
+  Token[T] = tuple[fact: Fact[T], insert: bool, originalFact: Fact[T]]
   IdAttr = tuple[id: int, attr: int]
   Vars[T] = Table[string, T]
   Var* = object
@@ -24,15 +24,17 @@ type
     children: seq[AlphaNode[T]]
   # beta network
   MemoryNodeType = enum
-    Root, Partial, Full
+    Root, Partial, Prod
   MemoryNode[T] = ref object
     parent: JoinNode[T]
     children: seq[JoinNode[T]]
     vars*: seq[Vars[T]]
     condition: Condition[T]
+    prodNode: MemoryNode[T]
     case nodeType: MemoryNodeType
-      of Full:
+      of Prod:
         callback: CallbackFn[T]
+        trigger: bool
       else:
         nil
     when not defined(release):
@@ -47,6 +49,7 @@ type
     nodes: seq[AlphaNode[T]]
     vars: seq[Var]
     filter: FilterFn[T]
+    shouldTrigger: bool
   Production*[T, U] = object
     callback: SessionCallbackFn[T]
     conditions: seq[Condition[T]]
@@ -73,8 +76,8 @@ proc addNodes(session: Session, nodes: seq[AlphaNode]): AlphaNode =
   for node in nodes:
     result = result.addNode(node)
 
-proc add*[T, U](production: var Production[T, U], id: Var or T, attr: T, value: Var or T, filter: FilterFn[T] = nil) =
-  var condition = Condition[T](filter: filter)
+proc add*[T, U](production: var Production[T, U], id: Var or T, attr: T, value: Var or T, filter: FilterFn[T], shouldTrigger: bool) =
+  var condition = Condition[T](filter: filter, shouldTrigger: shouldTrigger)
   for fieldType in [Field.Identifier, Field.Attribute, Field.Value]:
     case fieldType:
       of Field.Identifier:
@@ -106,6 +109,7 @@ proc isAncestor(x, y: JoinNode): bool =
 
 proc add*[T, U](session: Session[T], production: Production[T, U]) =
   var memNode = session.betaNode
+  var memNodes: seq[MemoryNode[T]]
   let last = production.conditions.len - 1
   for i in 0 .. last:
     var condition = production.conditions[i]
@@ -116,15 +120,16 @@ proc add*[T, U](session: Session[T], production: Production[T, U]) =
     # successors must be sorted by ancestry (descendents first) to avoid duplicate rule firings
     leafNode.successors.sort(proc (x, y: JoinNode[T]): int =
       if isAncestor(x, y): 1 else: -1)
-    var newMemNode = MemoryNode[T](parent: joinNode, nodeType: if i == last: Full else: Partial, condition: condition)
-    if newMemNode.nodeType == Full:
+    var newMemNode = MemoryNode[T](parent: joinNode, nodeType: if i == last: Prod else: Partial, condition: condition)
+    if newMemNode.nodeType == Prod:
       let sess = session
       newMemNode.callback = proc (vars: Vars[T]) = production.callback(sess, vars)
-      if session.prodNodes.hasKey(production.name):
-        raise newException(Exception, production.name & " already exists in session")
       session.prodNodes[production.name] = newMemNode
+    memNodes.add(newMemNode)
     joinNode.children.add(newMemNode)
     memNode = newMemNode
+  for node in memNodes:
+    node.prodNode = memNode
 
 proc getVarsFromFact[T](vars: var Vars[T], condition: Condition[T], fact: Fact[T]): bool =
   for v in condition.vars:
@@ -157,11 +162,11 @@ proc performJoinTests(node: JoinNode, vars: Vars, alphaFact: Fact): bool =
 
 proc leftActivation[T](node: MemoryNode[T], vars: Vars[T], debugFacts: seq[Fact[T]], token: Token[T])
 
-proc leftActivation[T](node: JoinNode[T], vars: Vars[T], debugFacts: seq[Fact[T]], insert: bool) =
+proc leftActivation[T](node: JoinNode[T], vars: Vars[T], debugFacts: seq[Fact[T]], token: Token[T]) =
   for alphaFact in node.alphaNode.facts.values:
     if performJoinTests(node, vars, alphaFact):
       for child in node.children:
-        child.leftActivation(vars, debugFacts, (alphaFact, insert))
+        child.leftActivation(vars, debugFacts, (alphaFact, token.insert, token.originalFact))
 
 proc leftActivation[T](node: MemoryNode[T], vars: Vars[T], debugFacts: seq[Fact[T]], token: Token[T]) =
   var newVars = vars
@@ -183,11 +188,15 @@ proc leftActivation[T](node: MemoryNode[T], vars: Vars[T], debugFacts: seq[Fact[
     when not defined(release):
       node.debugFacts.delete(index)
 
-  if node.nodeType == Full and token.insert:
+  if token.insert and node.condition.shouldTrigger and token.fact == token.originalFact:
+    node.prodNode.trigger = true
+
+  if node.nodeType == Prod and token.insert and node.trigger:
+    node.trigger = false
     node.callback(newVars)
   else:
     for child in node.children:
-      child.leftActivation(newVars, debugFacts, token.insert)
+      child.leftActivation(newVars, debugFacts, token)
 
 proc rightActivation[T](node: JoinNode[T], token: Token[T]) =
   if node.parent.nodeType == Root:
@@ -226,7 +235,7 @@ proc insertFact(node: AlphaNode, fact: Fact, root: bool, insert: bool): bool =
   for child in node.children:
     if child.insertFact(fact, false, insert):
       return true
-  node.rightActivation((fact, insert))
+  node.rightActivation((fact, insert, fact))
   true
 
 proc removeFact*[T](session: Session[T], fact: Fact[T])
@@ -311,7 +320,7 @@ proc print[T](node: MemoryNode[T], indent: int): string =
   for i in 0 ..< indent:
     result &= "  "
   let cnt = node.vars.len
-  if node.nodeType == Full:
+  if node.nodeType == Prod:
     result &= "ProdNode ({cnt})\n".fmt
   else:
     result &= "MemoryNode ({cnt})\n".fmt

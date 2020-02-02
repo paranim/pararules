@@ -80,6 +80,7 @@ proc addCond(dataType: NimNode, vars: OrderedTable[string, VarInfo], prod: NimNo
   let id = node.wrap(dataType, 0)
   let attr = node.wrap(dataType, 1)
   let value = node.wrap(dataType, 2)
+  let shouldTrigger = if node.len == 4: node[3] else: true.newLit
   if filter != nil:
     let fn = genSym(nskLet, "fn")
     let v = genSym(nskParam, "v")
@@ -89,10 +90,10 @@ proc addCond(dataType: NimNode, vars: OrderedTable[string, VarInfo], prod: NimNo
       let `fn` = proc (`v`: Table[string, `dataType`]): bool =
         `letNode`
         `filter`
-      add(`prod`, `id`, `attr`, `value`, `fn`)
+      add(`prod`, `id`, `attr`, `value`, `fn`, `shouldTrigger`)
   else:
     quote do:
-      add(`prod`, `id`, `attr`, `value`)
+      add(`prod`, `id`, `attr`, `value`, nil, `shouldTrigger`)
 
 proc parseWhat(name: string, dataType: NimNode, attrs: Table[string, int], types: seq[string], node: NimNode, condNode: NimNode, thenNode: NimNode): NimNode =
   var vars: OrderedTable[string, VarInfo]
