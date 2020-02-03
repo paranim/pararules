@@ -126,6 +126,8 @@ proc add*[T, U](session: Session[T], production: Production[T, U]) =
     if newMemNode.nodeType == Prod:
       var sess = session
       newMemNode.callback = proc (vars: Vars[T]) = production.callback(sess, vars)
+      if session.prodNodes.hasKey(production.name):
+        raise newException(Exception, production.name & " already exists in session")
       session.prodNodes[production.name] = newMemNode
     memNodes.add(newMemNode)
     joinNode.children.add(newMemNode)
