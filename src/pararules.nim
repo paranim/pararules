@@ -446,6 +446,15 @@ macro schema*(sig: untyped, body: untyped): untyped =
     expectKind(pair, nnkCall)
     let attr = pair[0].strVal
     let typ = pair[1][0]
+    if typ.kind == nnkBracketExpr:
+      let message = """
+All types in the schema must be simple names.
+If you have a type that takes type parameters, such as `seq[string]`,
+make a type alias such as `type Strings = seq[string]` and then
+use `Strings` in the schema.
+      """
+      raise newException(Exception, message)
+    expectKind(typ, nnkIdent)
     assert not (attr in attrs)
     if not (typ in types):
       types.add(typ)
