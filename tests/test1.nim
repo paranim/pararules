@@ -291,24 +291,59 @@ test "don't trigger rule when updating certain facts":
   check count == 1
 
 test "inserting inside a rule is delayed":
-  var session = initSession(Fact)
-  session.add:
-    rule firstRule(Fact):
-      what:
-        (b, Color, "blue")
-        (a, Color, c, false)
-      then:
-        # if this insertion is not delayed, it will throw an error
-        session.insert(Alice, Color, "maize")
+  let rules =
+    ruleset:
+      rule firstRule(Fact):
+        what:
+          (b, Color, "blue")
+          (a, Color, c, false)
+        then:
+          # if this insertion is not delayed, it will throw an error
+          session.insert(Alice, Color, "maize")
+      rule secondRule(Fact):
+        what:
+          (b, Color, "blue")
+          (a, Color, c, false)
 
-  session.add:
-    rule secondRule(Fact):
-      what:
-        (b, Color, "blue")
-        (a, Color, c, false)
+  var session = initSession(Fact)
+  for r in rules.fields:
+    session.add(r)
 
   session.insert(Bob, Color, "blue")
   session.insert(Alice, Color, "red")
+
+test "inserting inside a rule cascades":
+  let rules =
+    ruleset:
+      rule firstRule(Fact):
+        what:
+          (b, Color, "blue")
+          (a, Color, c)
+        then:
+          session.insert(Charlie, RightOf, Bob)
+      rule secondRule(Fact):
+        what:
+          (c, RightOf, b)
+        then:
+          session.insert(b, LeftOf, c)
+      rule thirdRule(Fact):
+        what:
+          (b, LeftOf, c)
+
+  var session = initSession(Fact)
+  for r in rules.fields:
+    session.add(r)
+
+  session.insert(Bob, Color, "blue")
+  session.insert(Alice, Color, "red")
+
+  let first = session.prodNodes["firstRule"]
+  let second = session.prodNodes["secondRule"]
+  let third = session.prodNodes["thirdRule"]
+
+  check first.debugFacts.len == 1
+  check second.debugFacts.len == 1
+  check third.debugFacts.len == 1
 
 # this one is not used...
 # it's just here to make sure we can define
