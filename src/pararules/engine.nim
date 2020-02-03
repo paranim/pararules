@@ -12,7 +12,7 @@ type
     name*: string
     field: Field
   CallbackFn[T] = proc (vars: Vars[T])
-  SessionCallbackFn[T] = proc (session: Session[T], vars: Vars[T])
+  SessionCallbackFn[T] = proc (session: var Session[T], vars: Vars[T])
   QueryFn[T, U] = proc (vars: Vars[T]): U
   FilterFn[T] = proc (vars: Vars[T]): bool
   # alpha network
@@ -55,11 +55,13 @@ type
     conditions: seq[Condition[T]]
     query: QueryFn[T, U]
     name: string
-  Session*[T] = ref object
+  Session*[T] = object
     alphaNode: AlphaNode[T]
     betaNode: MemoryNode[T]
-    allFacts: Table[IdAttr, Fact[T]]
-    prodNodes*: Table[string, MemoryNode[T]]
+    allFacts: ref Table[IdAttr, Fact[T]]
+    prodNodes*: ref Table[string, MemoryNode[T]]
+    queue*: ref seq[tuple[fact: Fact[T], insert: bool]]
+    insideRule*: bool
 
 proc getParent*(node: MemoryNode): MemoryNode =
   node.parent.parent
@@ -122,7 +124,7 @@ proc add*[T, U](session: Session[T], production: Production[T, U]) =
       if isAncestor(x, y): 1 else: -1)
     var newMemNode = MemoryNode[T](parent: joinNode, nodeType: if i == last: Prod else: Partial, condition: condition)
     if newMemNode.nodeType == Prod:
-      let sess = session
+      var sess = session
       newMemNode.callback = proc (vars: Vars[T]) = production.callback(sess, vars)
       session.prodNodes[production.name] = newMemNode
     memNodes.add(newMemNode)
@@ -241,21 +243,43 @@ proc insertFact(node: AlphaNode, fact: Fact, root: bool, insert: bool): bool =
 proc removeFact*[T](session: Session[T], fact: Fact[T])
 
 proc insertFact*[T](session: Session[T], fact: Fact[T]) =
-  let id = fact.id.type0.ord
-  let attr = fact.attr.type1.ord
-  let idAttr = (id, attr)
-  if session.allFacts.hasKey(idAttr):
-    session.removeFact(session.allFacts[idAttr])
-  session.allFacts[idAttr] = fact
-  discard session.alphaNode.insertFact(fact, true, true)
+  if session.insideRule:
+    session.queue[].add((fact, true))
+  else:
+    let id = fact.id.type0.ord
+    let attr = fact.attr.type1.ord
+    let idAttr = (id, attr)
+    if session.allFacts.hasKey(idAttr):
+      session.removeFact(session.allFacts[idAttr])
+    session.allFacts[idAttr] = fact
+    discard session.alphaNode.insertFact(fact, true, true)
+    let queue = session.queue[]
+    session.queue[] = @[]
+    for (fact, insert) in queue:
+      if insert:
+        session.insertFact(fact)
+      else:
+        session.removeFact(fact)
 
 proc removeFact*[T](session: Session[T], fact: Fact[T]) =
-  discard session.alphaNode.insertFact(fact, true, false)
+  if session.insideRule:
+    session.queue[].add((fact, false))
+  else:
+    discard session.alphaNode.insertFact(fact, true, false)
+    let queue = session.queue[]
+    session.queue[] = @[]
+    for (fact, insert) in queue:
+      if insert:
+        session.insertFact(fact)
+      else:
+        session.removeFact(fact)
 
-proc newSession*[T](): Session[T] =
-  new(result)
+proc initSession*[T](): Session[T] =
   result.alphaNode = new(AlphaNode[T])
   result.betaNode = new(MemoryNode[T])
+  result.allFacts = newTable[IdAttr, Fact[T]]()
+  result.prodNodes = newTable[string, MemoryNode[T]]()
+  new result.queue
 
 proc initProduction*[T, U](name: string, cb: SessionCallbackFn[T], query: QueryFn[T, U]): Production[T, U] =
   result.name = name

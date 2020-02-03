@@ -19,7 +19,7 @@ schema Fact(Id, Attr):
   Self: Id
 
 test "number of conditions != number of facts":
-  var session = newSession(Fact)
+  var session = initSession(Fact)
   session.add:
     rule numCondsAndFacts(Fact):
       what:
@@ -49,7 +49,7 @@ test "number of conditions != number of facts":
   check prodNode.debugFacts[0].len == 5
 
 test "adding facts out of order":
-  var session = newSession(Fact)
+  var session = initSession(Fact)
   session.add:
     rule outOfOrder(Fact):
       what:
@@ -88,7 +88,7 @@ test "adding facts out of order":
   check prodNode.debugFacts[0].len == 10
 
 test "duplicate facts":
-  var session = newSession(Fact)
+  var session = initSession(Fact)
   session.add:
     rule duplicateFacts(Fact):
       what:
@@ -105,7 +105,7 @@ test "duplicate facts":
   check prodNode.debugFacts[0].len == 3
 
 test "removing facts":
-  var session = newSession(Fact)
+  var session = initSession(Fact)
   session.add:
     rule removingFacts(Fact):
       what:
@@ -132,7 +132,7 @@ test "removing facts":
   check prodNode.getParent.debugFacts.len == 0
 
 test "updating facts":
-  var session = newSession(Fact)
+  var session = initSession(Fact)
   var zVal: Id
   session.add:
     rule updatingFacts(Fact):
@@ -158,7 +158,7 @@ test "updating facts":
   check zVal == Xavier
 
 test "updating facts in different alpha nodes":
-  var session = newSession(Fact)
+  var session = initSession(Fact)
   session.add:
     rule updatingFactsDiffNodes(Fact):
       what:
@@ -179,7 +179,7 @@ test "updating facts in different alpha nodes":
   check prodNode.debugFacts.len == 0
 
 test "complex conditions":
-  var session = newSession(Fact)
+  var session = initSession(Fact)
   session.add:
     rule complexCond(Fact):
       what:
@@ -209,7 +209,7 @@ test "queries":
         (id, LeftOf, leftOf)
         (id, Height, height)
 
-  var session = newSession(Fact)
+  var session = initSession(Fact)
   session.add(getPerson)
 
   session.insert(Bob, Color, "blue")
@@ -257,7 +257,7 @@ test "creating a ruleset":
           check a == Alice
           check b == Bob
 
-  var session = newSession(Fact)
+  var session = initSession(Fact)
   for r in rules.fields:
     session.add(r)
 
@@ -275,7 +275,7 @@ test "creating a ruleset":
 test "don't trigger rule when updating certain facts":
   var count = 0
 
-  var session = newSession(Fact)
+  var session = initSession(Fact)
   session.add:
     rule dontTrigger(Fact):
       what:
@@ -289,6 +289,26 @@ test "don't trigger rule when updating certain facts":
   session.insert(Alice, Color, "maize")
 
   check count == 1
+
+test "inserting inside a rule is delayed":
+  var session = initSession(Fact)
+  session.add:
+    rule firstRule(Fact):
+      what:
+        (b, Color, "blue")
+        (a, Color, c, false)
+      then:
+        # if this insertion is not delayed, it will throw an error
+        session.insert(Alice, Color, "maize")
+
+  session.add:
+    rule secondRule(Fact):
+      what:
+        (b, Color, "blue")
+        (a, Color, c, false)
+
+  session.insert(Bob, Color, "blue")
+  session.insert(Alice, Color, "red")
 
 # this one is not used...
 # it's just here to make sure we can define

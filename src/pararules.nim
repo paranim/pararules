@@ -138,7 +138,8 @@ proc parseWhat(name: string, dataType: NimNode, attrs: Table[string, int], types
     let usedVars = getUsedVars(vars, thenNode)
     let letNode = createLet(usedVars, v)
     result = newStmtList(quote do:
-      let `callback` = proc (`session`: Session[`dataType`], `v`: Table[string, `dataType`]) =
+      let `callback` = proc (`session`: var Session[`dataType`], `v`: Table[string, `dataType`]) =
+        `session`.insideRule = true
         `letNode`
         `thenNode`
       let `query` = proc (`v2`: Table[string, `dataType`]): `tupleType` =
@@ -147,7 +148,7 @@ proc parseWhat(name: string, dataType: NimNode, attrs: Table[string, int], types
     )
   else:
     result = newStmtList(quote do:
-      let `callback` = proc (`session`: Session[`dataType`], `v`: Table[string, `dataType`]) = discard
+      let `callback` = proc (`session`: var Session[`dataType`], `v`: Table[string, `dataType`]) = discard
       let `query` = proc (`v2`: Table[string, `dataType`]): `tupleType` =
         `queryBody`
       var `prod` = initProduction[`dataType`, `tupleType`](`name`, `callback`, `query`)
@@ -461,9 +462,9 @@ macro schema*(sig: untyped, body: untyped): untyped =
 # these wrapper macros are only here so
 # the engine doesn't need to be imported directly
 
-macro newSession*(dataType: type): untyped =
+macro initSession*(dataType: type): untyped =
   quote do:
-    newSession[`dataType`]()
+    initSession[`dataType`]()
 
 macro add*(session: Session, production: Production): untyped =
   quote do:
