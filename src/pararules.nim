@@ -40,11 +40,11 @@ proc wrap(parentNode: NimNode, dataType: NimNode, index: int): NimNode =
             `checkProc`(`attrName`, `dataNode`.kind.ord)
           `dataNode`
 
-proc createLet(vars: OrderedTable[string, VarInfo], paramNode: NimNode): NimNode =
+proc createVars(vars: OrderedTable[string, VarInfo], paramNode: NimNode): NimNode =
   result = newStmtList()
   for (varName, varInfo) in vars.pairs:
     let typeField = ident(typePrefix & $varInfo.typeNum)
-    result.add(newLetStmt(
+    result.add(newVarStmt(
       newIdentNode(varName),
       quote do:
         `paramNode`[`varName`].`typeField`
@@ -85,10 +85,10 @@ proc addCond(dataType: NimNode, vars: OrderedTable[string, VarInfo], prod: NimNo
     let fn = genSym(nskLet, "fn")
     let v = genSym(nskParam, "v")
     let usedVars = getUsedVars(vars, filter)
-    let letNode = createLet(usedVars, v)
+    let varNode = createVars(usedVars, v)
     quote do:
       let `fn` = proc (`v`: Table[string, `dataType`]): bool =
-        `letNode`
+        `varNode`
         `filter`
       add(`prod`, `id`, `attr`, `value`, `fn`, `shouldTrigger`)
   else:
@@ -136,11 +136,11 @@ proc parseWhat(name: string, dataType: NimNode, attrs: Table[string, int], types
 
   if thenNode != nil:
     let usedVars = getUsedVars(vars, thenNode)
-    let letNode = createLet(usedVars, v)
+    let varNode = createVars(usedVars, v)
     result = newStmtList(quote do:
       let `callback` = proc (`session`: var Session[`dataType`], `v`: Table[string, `dataType`]) =
         `session`.insideRule = true
-        `letNode`
+        `varNode`
         `thenNode`
       let `query` = proc (`v2`: Table[string, `dataType`]): `tupleType` =
         `queryBody`
