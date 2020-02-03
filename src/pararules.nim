@@ -445,6 +445,8 @@ macro schema*(sig: untyped, body: untyped): untyped =
   for pair in body:
     expectKind(pair, nnkCall)
     let attr = pair[0].strVal
+    if not attr[0].isUpperAscii:
+      raise newException(Exception, attr & " is an invalid attribute name because it must start with an uppercase letter")
     let typ = pair[1][0]
     if typ.kind == nnkBracketExpr:
       let message = """
