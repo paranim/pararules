@@ -280,7 +280,7 @@ test "don't trigger rule when updating certain facts":
     rule dontTrigger(Fact):
       what:
         (b, Color, "blue")
-        (a, Color, c, false)
+        (a, Color, c, then = false)
       then:
         count += 1
 
@@ -296,14 +296,14 @@ test "inserting inside a rule is delayed":
       rule firstRule(Fact):
         what:
           (b, Color, "blue")
-          (a, Color, c, false)
+          (a, Color, c, then = false)
         then:
           # if this insertion is not delayed, it will throw an error
           session.insert(Alice, Color, "maize")
       rule secondRule(Fact):
         what:
           (b, Color, "blue")
-          (a, Color, c, false)
+          (a, Color, c, then = false)
 
   var session = initSession(Fact)
   for r in rules.fields:
