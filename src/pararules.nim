@@ -269,6 +269,16 @@ macro findAll*(session: Session, prod: Production, args: varargs[untyped]): unty
     quote do:
       findAllIndices(`session`, `prod`)
 
+macro query*(session: Session, prod: Production, args: varargs[untyped]): untyped =
+  let dataType = prod.getDataType
+  if args.len > 0:
+    let params = createParamsArray(dataType, args)
+    quote do:
+      get(`session`, `prod`, findIndex(`session`, `prod`, `params`))
+  else:
+    quote do:
+      get(`session`, `prod`, findIndex(`session`, `prod`))
+
 proc createBranch(dataType: NimNode, index: int, typ: NimNode): NimNode =
   result = newNimNode(nnkOfBranch)
   var list = newNimNode(nnkRecList)

@@ -251,6 +251,9 @@ test "queries":
   check res.leftOf == Zach
   check res.height == 72
 
+  let resQuery = session.query(getPerson, id = Bob)
+  check resQuery == res
+
   let locs = session.findAll(getPerson, height = 72)
   check locs.len == 2
   let res1 = session.get(getPerson, locs[0])
