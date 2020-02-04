@@ -297,8 +297,6 @@ proc matches[I, T](vars: Vars[T], params: array[I, (string, T)]): bool =
 
 proc findIndex*[I, T](session: Session, prod: Production, params: array[I, (string, T)]): int =
   let vars = session.prodNodes[prod.name].vars
-  if vars.len == 0:
-    return -1
   result = vars.len - 1
   while result >= 0:
     if matches(vars[result], params):
@@ -307,8 +305,6 @@ proc findIndex*[I, T](session: Session, prod: Production, params: array[I, (stri
 
 proc findIndex*(session: Session, prod: Production): int =
   let vars = session.prodNodes[prod.name].vars
-  if vars.len == 0:
-    return -1
   result = vars.len - 1
 
 proc findAllIndices*[I, T](session: Session, prod: Production, params: array[I, (string, T)]): seq[int] =
