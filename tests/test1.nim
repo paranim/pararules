@@ -201,6 +201,25 @@ test "complex conditions":
   session.insert(Yair, LeftOf, Charlie)
   check prodNode.debugFacts.len == 1
 
+# this was failing because we weren't testing conditions
+# in join nodes who are children of the root memory node
+test "simple conditions":
+  var count = 0
+
+  var session = initSession(Fact)
+  session.add:
+    rule simpleCond(Fact):
+      what:
+        (b, Color, "blue")
+      cond:
+        false
+      then:
+        count += 1
+
+  session.insert(Bob, Color, "blue")
+
+  check count == 0
+
 test "queries":
   let getPerson =
     rule getPerson(Fact):

@@ -204,8 +204,9 @@ proc leftActivation[T](node: MemoryNode[T], vars: Vars[T], debugFacts: seq[Fact[
 
 proc rightActivation[T](node: JoinNode[T], token: Token[T]) =
   if node.parent.nodeType == Root:
-    for child in node.children:
-      child.leftActivation(initTable[string, T](), newSeq[Fact[T]](), token)
+    if performJoinTests(node, Vars[T](), token.fact):
+      for child in node.children:
+        child.leftActivation(initTable[string, T](), newSeq[Fact[T]](), token)
   else:
     for i in 0 ..< node.parent.vars.len:
       let vars = node.parent.vars[i]
