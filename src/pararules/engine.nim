@@ -243,7 +243,17 @@ proc insertFact(node: AlphaNode, fact: Fact, root: bool, insert: bool): bool =
   node.rightActivation((fact, insert, fact))
   true
 
+proc insertFact*[T](session: Session[T], fact: Fact[T])
 proc removeFact*[T](session: Session[T], fact: Fact[T])
+
+proc emptyQueue[T](session: Session[T]) =
+  let queue = session.queue[]
+  session.queue[] = @[]
+  for (fact, insert) in queue:
+    if insert:
+      session.insertFact(fact)
+    else:
+      session.removeFact(fact)
 
 proc insertFact*[T](session: Session[T], fact: Fact[T]) =
   if session.insideRule:
@@ -256,26 +266,14 @@ proc insertFact*[T](session: Session[T], fact: Fact[T]) =
       session.removeFact(session.allFacts[idAttr])
     session.allFacts[idAttr] = fact
     discard session.alphaNode.insertFact(fact, true, true)
-    let queue = session.queue[]
-    session.queue[] = @[]
-    for (fact, insert) in queue:
-      if insert:
-        session.insertFact(fact)
-      else:
-        session.removeFact(fact)
+    session.emptyQueue()
 
 proc removeFact*[T](session: Session[T], fact: Fact[T]) =
   if session.insideRule:
     session.queue[].add((fact, false))
   else:
     discard session.alphaNode.insertFact(fact, true, false)
-    let queue = session.queue[]
-    session.queue[] = @[]
-    for (fact, insert) in queue:
-      if insert:
-        session.insertFact(fact)
-      else:
-        session.removeFact(fact)
+    session.emptyQueue()
 
 proc initSession*[T](): Session[T] =
   result.alphaNode = new(AlphaNode[T])
