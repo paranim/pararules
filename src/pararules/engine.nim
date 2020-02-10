@@ -167,27 +167,26 @@ proc performJoinTests(node: JoinNode, vars: Vars, alphaFact: Fact): bool =
       return false
   true
 
-proc leftActivation[T](node: MemoryNode[T], vars: Vars[T], debugFacts: seq[Fact[T]], token: Token[T])
+proc leftActivation[T](node: MemoryNode[T], vars: Vars[T], debugFacts: ref seq[Fact[T]], token: Token[T])
 
-proc leftActivation[T](node: JoinNode[T], vars: Vars[T], debugFacts: seq[Fact[T]], token: Token[T]) =
+proc leftActivation[T](node: JoinNode[T], vars: Vars[T], debugFacts: ref seq[Fact[T]], token: Token[T]) =
   for alphaFact in node.alphaNode.facts.values:
     if performJoinTests(node, vars, alphaFact):
       for child in node.children:
         child.leftActivation(vars, debugFacts, (alphaFact, token.insert, token.originalFact))
 
-proc leftActivation[T](node: MemoryNode[T], vars: Vars[T], debugFacts: seq[Fact[T]], token: Token[T]) =
+proc leftActivation[T](node: MemoryNode[T], vars: Vars[T], debugFacts: ref seq[Fact[T]], token: Token[T]) =
   var newVars = vars
   let success = newVars.getVarsFromFact(node.condition, token.fact)
   assert success
 
   when not defined(release):
-    var debugFacts = debugFacts
-    debugFacts.add(token.fact)
+    debugFacts[].add(token.fact)
 
   if token.insert:
     node.vars.add(newVars)
     when not defined(release):
-      node.debugFacts.add(debugFacts)
+      node.debugFacts.add(debugFacts[])
   else:
     let index = node.vars.find(newVars)
     assert index >= 0
@@ -206,19 +205,28 @@ proc leftActivation[T](node: MemoryNode[T], vars: Vars[T], debugFacts: seq[Fact[
       child.leftActivation(newVars, debugFacts, token)
 
 proc rightActivation[T](node: JoinNode[T], token: Token[T]) =
+  when not defined(release):
+    proc newRefSeq[T](s: seq[T]): ref seq[T] =
+      new(result)
+      result[] = s
   if node.parent.nodeType == Root:
     if performJoinTests(node, Vars[T](), token.fact):
       for child in node.children:
-        child.leftActivation(initTable[string, T](), newSeq[Fact[T]](), token)
+        let debugFacts: ref seq[Fact[T]] =
+          when not defined(release):
+            newRefSeq(newSeq[Fact[T]]())
+          else:
+            nil
+        child.leftActivation(initTable[string, T](), debugFacts, token)
   else:
     for i in 0 ..< node.parent.vars.len:
       let vars = node.parent.vars[i]
-      let debugFacts =
-        when not defined(release):
-          node.parent.debugFacts[i]
-        else:
-          newSeq[Fact[T]]()
       if performJoinTests(node, vars, token.fact):
+        let debugFacts: ref seq[Fact[T]] =
+          when not defined(release):
+            newRefSeq(node.parent.debugFacts[i])
+          else:
+            nil
         for child in node.children:
           child.leftActivation(vars, debugFacts, token)
 
