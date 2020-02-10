@@ -178,6 +178,25 @@ test "updating facts in different alpha nodes":
   session.insert(Yair, LeftOf, Xavier)
   check prodNode.debugFacts.len == 0
 
+test "facts can be stored in multiple alpha nodes":
+  var session = initSession(Fact)
+  var alice, zach: Id
+  session.add:
+    rule rule1(Fact):
+      what:
+        (a, LeftOf, Zach)
+      then:
+        alice = a
+  session.add:
+    rule rule2(Fact):
+      what:
+        (a, LeftOf, z)
+      then:
+        zach = z
+  session.insert(Alice, LeftOf, Zach)
+  check alice == Alice
+  check zach == Zach
+
 test "complex conditions":
   var session = initSession(Fact)
   session.add:
@@ -340,7 +359,6 @@ test "inserting inside a rule cascades":
       rule firstRule(Fact):
         what:
           (b, Color, "blue")
-          (a, Color, c)
         then:
           session.insert(Charlie, RightOf, Bob)
       rule secondRule(Fact):
@@ -357,7 +375,6 @@ test "inserting inside a rule cascades":
     session.add(r)
 
   session.insert(Bob, Color, "blue")
-  session.insert(Alice, Color, "red")
 
   let first = session.prodNodes["firstRule"]
   let second = session.prodNodes["secondRule"]

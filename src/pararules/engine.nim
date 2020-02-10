@@ -61,6 +61,7 @@ type
     alphaNode: AlphaNode[T]
     betaNode: MemoryNode[T]
     prodNodes*: ref Table[string, MemoryNode[T]]
+    idAttrNodes: ref Table[IdAttr, seq[AlphaNode[T]]]
     insideRule*: bool
     queue: Queue[T]
 
@@ -221,46 +222,32 @@ proc rightActivation[T](node: JoinNode[T], token: Token[T]) =
         for child in node.children:
           child.leftActivation(vars, debugFacts, token)
 
-proc rightActivation[T](node: AlphaNode[T], token: Token[T]) =
+proc rightActivation[T](session: Session[T], node: AlphaNode[T], token: Token[T]) =
   let id = token.fact.id.type0.ord
   let attr = token.fact.attr.type1.ord
+  let idAttr = (id, attr)
   if token.insert:
-    node.facts[(id, attr)] = token.fact
+    node.facts[idAttr] = token.fact
+    if session.idAttrNodes.hasKey(idAttr):
+      session.idAttrNodes[idAttr].add(node)
+    else:
+      session.idAttrNodes[idAttr] = @[node]
   else:
-    node.facts.del((id, attr))
+    node.facts.del(idAttr)
   for child in node.successors:
     child.rightActivation(token)
 
-proc updateFact(node: AlphaNode, fact: Fact, root: bool, insert: bool): bool =
+proc updateFact(session: Session, node: AlphaNode, fact: Fact, root: bool, insert: bool) =
   if not root:
     let val = case node.testField:
       of Field.Identifier: fact[0]
       of Field.Attribute: fact[1]
       of Field.Value: fact[2]
     if val != node.testValue:
-      return false
-  for child in node.children:
-    if child.updateFact(fact, false, insert):
-      return true
-  node.rightActivation((fact, insert, fact))
-  true
-
-proc removeIdAttr[T](node: AlphaNode[T], id: T, attr: T, root: bool) =
-  if not root:
-    let val = case node.testField:
-      of Field.Identifier: id
-      of Field.Attribute: attr
-      of Field.Value: node.testValue
-    if val != node.testValue:
       return
   for child in node.children:
-    child.removeIdAttr(id, attr, false)
-  let id = id.type0.ord
-  let attr = attr.type1.ord
-  let idAttr = (id, attr)
-  if node.facts.hasKey(idAttr):
-    let fact = node.facts[idAttr]
-    node.rightActivation((fact, false, fact))
+    session.updateFact(child, fact, false, insert)
+  session.rightActivation(node, (fact, insert, fact))
 
 proc insertFact*[T](session: Session[T], fact: Fact[T])
 proc removeFact*[T](session: Session[T], fact: Fact[T])
@@ -275,18 +262,26 @@ proc emptyQueue[T](session: Session[T]) =
       callback(vars)
 
 proc insertFact*[T](session: Session[T], fact: Fact[T]) =
-  session.alphaNode.removeIdAttr(fact.id, fact.attr, true)
-  discard session.alphaNode.updateFact(fact, true, true)
+  let id = fact.id.type0.ord
+  let attr = fact.attr.type1.ord
+  let idAttr = (id, attr)
+  if session.idAttrNodes.hasKey(idAttr):
+    for node in session.idAttrNodes[idAttr]:
+      let oldFact = node.facts[idAttr]
+      session.rightActivation(node, (oldFact, false, oldFact))
+    session.idAttrNodes.del(idAttr)
+  session.updateFact(session.alphaNode, fact, true, true)
   if not session.insideRule:
     session.emptyQueue()
 
 proc removeFact*[T](session: Session[T], fact: Fact[T]) =
-  discard session.alphaNode.updateFact(fact, true, false)
+  session.updateFact(session.alphaNode, fact, true, false)
 
 proc initSession*[T](): Session[T] =
   result.alphaNode = new(AlphaNode[T])
   result.betaNode = new(MemoryNode[T])
   result.prodNodes = newTable[string, MemoryNode[T]]()
+  result.idAttrNodes = newTable[IdAttr, seq[AlphaNode[T]]]()
   new result.queue
 
 proc initProduction*[T, U](name: string, cb: SessionCallbackFn[T], query: QueryFn[T, U]): Production[T, U] =
