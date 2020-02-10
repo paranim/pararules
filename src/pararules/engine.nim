@@ -158,11 +158,14 @@ proc getVarsFromFact[T](vars: var Vars[T], condition: Condition[T], fact: Fact[T
           vars[v.name] = fact[2]
   true
 
-proc performJoinTests(node: JoinNode, vars: Vars, alphaFact: Fact): bool =
+proc performJoinTests(node: JoinNode, vars: Vars, alphaFact: Fact, insert: bool): bool =
   var newVars = vars
   if not newVars.getVarsFromFact(node.condition, alphaFact):
     return false
-  if node.condition.filter != nil:
+   # only check the filter on insertion, so we can
+   # be sure that old facts are removed successfully,
+   # even if they technically don't satisfy the condition anymore
+  if insert and node.condition.filter != nil:
     if not node.condition.filter(newVars):
       return false
   true
@@ -171,7 +174,7 @@ proc leftActivation[T](node: MemoryNode[T], vars: Vars[T], debugFacts: ref seq[F
 
 proc leftActivation[T](node: JoinNode[T], vars: Vars[T], debugFacts: ref seq[Fact[T]], token: Token[T]) =
   for alphaFact in node.alphaNode.facts.values:
-    if performJoinTests(node, vars, alphaFact):
+    if performJoinTests(node, vars, alphaFact, token.insert):
       for child in node.children:
         child.leftActivation(vars, debugFacts, (alphaFact, token.insert, token.originalFact))
 
@@ -210,7 +213,7 @@ proc rightActivation[T](node: JoinNode[T], token: Token[T]) =
       new(result)
       result[] = s
   if node.parent.nodeType == Root:
-    if performJoinTests(node, Vars[T](), token.fact):
+    if performJoinTests(node, Vars[T](), token.fact, token.insert):
       for child in node.children:
         let debugFacts: ref seq[Fact[T]] =
           when not defined(release):
@@ -221,7 +224,7 @@ proc rightActivation[T](node: JoinNode[T], token: Token[T]) =
   else:
     for i in 0 ..< node.parent.vars.len:
       let vars = node.parent.vars[i]
-      if performJoinTests(node, vars, token.fact):
+      if performJoinTests(node, vars, token.fact, token.insert):
         let debugFacts: ref seq[Fact[T]] =
           when not defined(release):
             newRefSeq(node.parent.debugFacts[i])

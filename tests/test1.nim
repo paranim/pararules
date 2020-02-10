@@ -400,12 +400,27 @@ test "conditions can use external values":
         (a, LeftOf, b)
       cond:
         allowRuleToFire
+
+  let prod = session.prodNodes["rule1"]
+
   session.insert(Alice, LeftOf, Zach)
   allowRuleToFire = true
   # this was causing an assertion error because
   # previously i assumed that all deletions
   # in leftActivation would succeed.
   session.insert(Alice, LeftOf, Bob)
+
+  check prod.debugFacts.len == 1
+  check prod.debugFacts[0].len == 1
+
+  # now we prevent the rule from firing again,
+  # but the old "Alice, LeftOf, Bob" fact
+  # is still removed successfully
+
+  allowRuleToFire = false
+  session.insert(Alice, LeftOf, Zach)
+
+  check prod.debugFacts.len == 0
 
 # this one is not used...
 # it's just here to make sure we can define
