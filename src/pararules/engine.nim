@@ -241,9 +241,11 @@ proc rightActivation[T](session: Session[T], node: AlphaNode[T], token: Token[T]
     node.facts[idAttr] = token.fact
     if not session.idAttrNodes.hasKey(idAttr):
       session.idAttrNodes[idAttr] = cast[array[3, AlphaNode[T]]]([nil, nil, nil])
+    assert session.idAttrNodes[idAttr][node.testField.ord] == nil
     session.idAttrNodes[idAttr][node.testField.ord] = node
   else:
     node.facts.del(idAttr)
+    assert session.idAttrNodes[idAttr][node.testField.ord] != nil
     session.idAttrNodes[idAttr][node.testField.ord] = nil
   for child in node.successors:
     child.rightActivation(token)
@@ -258,7 +260,8 @@ proc insertFact(session: Session, node: AlphaNode, fact: Fact, root: bool) =
       return
   for child in node.children:
     session.insertFact(child, fact, false)
-  session.rightActivation(node, (fact, true, fact))
+  if not root:
+    session.rightActivation(node, (fact, true, fact))
 
 proc insertFact*[T](session: Session[T], fact: Fact[T])
 proc removeFact*[T](session: Session[T], fact: Fact[T])
