@@ -131,6 +131,13 @@ test "removing facts":
   check prodNode.debugFacts.len == 0
   check prodNode.getParent.debugFacts.len == 0
 
+  # re-insert to make sure idAttrNodes was cleared correctly
+  session.insert(Bob, Color, "blue")
+  session.insert(Yair, RightOf, Bob)
+  check prodNode.debugFacts.len == 1
+  check prodNode.getParent.debugFacts.len == 1
+  check prodNode.getParent.debugFacts[0].len == 3
+
 test "updating facts":
   var session = initSession(Fact)
   var zVal: Id

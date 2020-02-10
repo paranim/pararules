@@ -237,7 +237,7 @@ proc rightActivation[T](session: Session[T], node: AlphaNode[T], token: Token[T]
   for child in node.successors:
     child.rightActivation(token)
 
-proc updateFact(session: Session, node: AlphaNode, fact: Fact, root: bool, insert: bool) =
+proc insertFact(session: Session, node: AlphaNode, fact: Fact, root: bool) =
   if not root:
     let val = case node.testField:
       of Field.Identifier: fact[0]
@@ -246,8 +246,8 @@ proc updateFact(session: Session, node: AlphaNode, fact: Fact, root: bool, inser
     if val != node.testValue:
       return
   for child in node.children:
-    session.updateFact(child, fact, false, insert)
-  session.rightActivation(node, (fact, insert, fact))
+    session.insertFact(child, fact, false)
+  session.rightActivation(node, (fact, true, fact))
 
 proc insertFact*[T](session: Session[T], fact: Fact[T])
 proc removeFact*[T](session: Session[T], fact: Fact[T])
@@ -261,21 +261,24 @@ proc emptyQueue[T](session: Session[T]) =
     for (callback, vars) in queue:
       callback(vars)
 
-proc insertFact*[T](session: Session[T], fact: Fact[T]) =
-  let id = fact.id.type0.ord
-  let attr = fact.attr.type1.ord
+proc removeIdAttr[T](session: Session[T], id: T, attr: T) =
+  let id = id.type0.ord
+  let attr = attr.type1.ord
   let idAttr = (id, attr)
   if session.idAttrNodes.hasKey(idAttr):
     for node in session.idAttrNodes[idAttr]:
       let oldFact = node.facts[idAttr]
       session.rightActivation(node, (oldFact, false, oldFact))
     session.idAttrNodes.del(idAttr)
-  session.updateFact(session.alphaNode, fact, true, true)
+
+proc insertFact*[T](session: Session[T], fact: Fact[T]) =
+  session.removeIdAttr(fact.id, fact.attr)
+  session.insertFact(session.alphaNode, fact, true)
   if not session.insideRule:
     session.emptyQueue()
 
 proc removeFact*[T](session: Session[T], fact: Fact[T]) =
-  session.updateFact(session.alphaNode, fact, true, false)
+  session.removeIdAttr(fact.id, fact.attr)
 
 proc initSession*[T](): Session[T] =
   result.alphaNode = new(AlphaNode[T])
