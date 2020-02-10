@@ -61,7 +61,7 @@ type
     alphaNode: AlphaNode[T]
     betaNode: MemoryNode[T]
     prodNodes*: ref Table[string, MemoryNode[T]]
-    idAttrNodes: ref Table[IdAttr, seq[AlphaNode[T]]]
+    idAttrNodes: ref Table[IdAttr, array[3, AlphaNode[T]]]
     insideRule*: bool
     queue: Queue[T]
 
@@ -228,12 +228,12 @@ proc rightActivation[T](session: Session[T], node: AlphaNode[T], token: Token[T]
   let idAttr = (id, attr)
   if token.insert:
     node.facts[idAttr] = token.fact
-    if session.idAttrNodes.hasKey(idAttr):
-      session.idAttrNodes[idAttr].add(node)
-    else:
-      session.idAttrNodes[idAttr] = @[node]
+    if not session.idAttrNodes.hasKey(idAttr):
+      session.idAttrNodes[idAttr] = cast[array[3, AlphaNode[T]]]([nil, nil, nil])
+    session.idAttrNodes[idAttr][node.testField.ord] = node
   else:
     node.facts.del(idAttr)
+    session.idAttrNodes[idAttr][node.testField.ord] = nil
   for child in node.successors:
     child.rightActivation(token)
 
@@ -266,10 +266,11 @@ proc removeIdAttr[T](session: Session[T], id: T, attr: T) =
   let attr = attr.type1.ord
   let idAttr = (id, attr)
   if session.idAttrNodes.hasKey(idAttr):
-    for node in session.idAttrNodes[idAttr]:
-      let oldFact = node.facts[idAttr]
-      session.rightActivation(node, (oldFact, false, oldFact))
-    session.idAttrNodes.del(idAttr)
+    for i in 0 ..< session.idAttrNodes[idAttr].len:
+      let node = session.idAttrNodes[idAttr][i]
+      if node != nil:
+        let oldFact = node.facts[idAttr]
+        session.rightActivation(node, (oldFact, false, oldFact))
 
 proc insertFact*[T](session: Session[T], fact: Fact[T]) =
   session.removeIdAttr(fact.id, fact.attr)
@@ -284,7 +285,7 @@ proc initSession*[T](): Session[T] =
   result.alphaNode = new(AlphaNode[T])
   result.betaNode = new(MemoryNode[T])
   result.prodNodes = newTable[string, MemoryNode[T]]()
-  result.idAttrNodes = newTable[IdAttr, seq[AlphaNode[T]]]()
+  result.idAttrNodes = newTable[IdAttr, array[3, AlphaNode[T]]]()
   new result.queue
 
 proc initProduction*[T, U](name: string, cb: SessionCallbackFn[T], query: QueryFn[T, U]): Production[T, U] =
