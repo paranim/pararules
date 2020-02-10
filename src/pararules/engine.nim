@@ -189,10 +189,10 @@ proc leftActivation[T](node: MemoryNode[T], vars: Vars[T], debugFacts: ref seq[F
       node.debugFacts.add(debugFacts[])
   else:
     let index = node.vars.find(newVars)
-    assert index >= 0
-    node.vars.delete(index)
-    when not defined(release):
-      node.debugFacts.delete(index)
+    if index >= 0:
+      node.vars.delete(index)
+      when not defined(release):
+        node.debugFacts.delete(index)
 
   if token.insert and node.condition.shouldTrigger and token.fact == token.originalFact:
     node.prodNode.trigger = true

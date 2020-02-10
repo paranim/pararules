@@ -391,6 +391,22 @@ test "inserting inside a rule cascades":
   check second.debugFacts.len == 1
   check third.debugFacts.len == 1
 
+test "conditions can use external values":
+  var session = initSession(Fact)
+  var allowRuleToFire = false
+  session.add:
+    rule rule1(Fact):
+      what:
+        (a, LeftOf, b)
+      cond:
+        allowRuleToFire
+  session.insert(Alice, LeftOf, Zach)
+  allowRuleToFire = true
+  # this was causing an assertion error because
+  # previously i assumed that all deletions
+  # in leftActivation would succeed.
+  session.insert(Alice, LeftOf, Bob)
+
 # this one is not used...
 # it's just here to make sure we can define
 # multiple schemas in one module
