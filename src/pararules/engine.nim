@@ -5,7 +5,13 @@ type
   Field* = enum
     Identifier, Attribute, Value
   Fact[T] = tuple[id: T, attr: T, value: T]
-  Token[T] = tuple[fact: Fact[T], insert: bool, originalFact: Fact[T]]
+  Token[T] = object
+    fact: Fact[T]
+    case insert: bool
+      of true:
+        originalFact: Fact[T]
+      of false:
+        nil
   IdAttr = tuple[id: int, attr: int]
   Vars[T] = Table[string, T]
   Var* = object
@@ -175,8 +181,10 @@ proc leftActivation[T](node: MemoryNode[T], vars: Vars[T], debugFacts: ref seq[F
 proc leftActivation[T](node: JoinNode[T], vars: Vars[T], debugFacts: ref seq[Fact[T]], token: Token[T]) =
   for alphaFact in node.alphaNode.facts.values:
     if performJoinTests(node, vars, alphaFact, token.insert):
+      var newToken = token
+      newToken.fact = alphaFact
       for child in node.children:
-        child.leftActivation(vars, debugFacts, (alphaFact, token.insert, token.originalFact))
+        child.leftActivation(vars, debugFacts, newToken)
 
 proc leftActivation[T](node: MemoryNode[T], vars: Vars[T], debugFacts: ref seq[Fact[T]], token: Token[T]) =
   var newVars = vars
@@ -250,7 +258,7 @@ proc rightActivation[T](session: Session[T], node: AlphaNode[T], token: Token[T]
   for child in node.successors:
     child.rightActivation(token)
 
-proc insertFact(session: Session, node: AlphaNode, fact: Fact, root: bool) =
+proc insertFact[T](session: Session[T], node: AlphaNode[T], fact: Fact[T], root: bool) =
   if not root:
     let val = case node.testField:
       of Field.Identifier: fact[0]
@@ -261,7 +269,7 @@ proc insertFact(session: Session, node: AlphaNode, fact: Fact, root: bool) =
   for child in node.children:
     session.insertFact(child, fact, false)
   if not root:
-    session.rightActivation(node, (fact, true, fact))
+    session.rightActivation(node, Token[T](fact: fact, insert: true, originalFact: fact))
 
 proc insertFact*[T](session: Session[T], fact: Fact[T])
 proc removeFact*[T](session: Session[T], fact: Fact[T])
@@ -284,7 +292,7 @@ proc removeIdAttr[T](session: Session[T], id: T, attr: T) =
       let node = session.idAttrNodes[idAttr][i]
       if node != nil:
         let oldFact = node.facts[idAttr]
-        session.rightActivation(node, (oldFact, false, oldFact))
+        session.rightActivation(node, Token[T](fact: oldFact, insert: false))
 
 proc insertFact*[T](session: Session[T], fact: Fact[T]) =
   session.removeIdAttr(fact.id, fact.attr)
