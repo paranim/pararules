@@ -239,6 +239,22 @@ rule stopPlayer(Fact):
 
 It is better to do it that way than to write `x >= float(windowWidth) and windowWidth > 0` on one line, because it gives pararules the opportunity to run each condition at the optimal time. If you need the conditions to work with an `or`, though, you will need to put them together in that way.
 
+If you're trying to debug a `cond` block, keep in mind that you can put whatever arbitrary code you want in there. For example, you can make it print out the values by creating a new scope with `block`, as long as the condition itself is the last thing in that scope:
+
+```nim
+rule stopPlayer(Fact):
+  what:
+    (Global, WindowWidth, windowWidth)
+    (Player, X, x)
+  cond:
+    block:
+      echo x, " ", windowWidth # this is one way you can debug the condition
+      x >= float(windowWidth)
+    windowWidth > 0
+  then:
+    session.insert(Player, X, 0.0)
+```
+
 ## Complex types
 
 Pararules is not limited to storing scalar types like `float` and `int` — you can use any type you want. For example, to store the currently-pressed keys, you can import the `sets` module and use a `HashSet[int]` to store them. However, you need to use a type alias when specifying it in the schema:
@@ -361,22 +377,6 @@ session.add:
       (`playerId`, Y, y)
 ```
 
-If you're trying to debug a `cond` block and figure out why it's not working, keep in mind that you can put whatever arbitrary code you want in there. For example, you can make it print out the values by creating a new scope with `block`, as long as the condition itself is the last thing in that scope:
-
-```nim
-rule stopPlayer(Fact):
-  what:
-    (Global, WindowWidth, windowWidth)
-    (Player, X, x)
-  cond:
-    block:
-      echo x, " ", windowWidth # this is one way you can debug the condition
-      x >= float(windowWidth)
-    windowWidth > 0
-  then:
-    session.insert(Player, X, 0.0)
-```
-
 ## Wrap up
 
 In a way, rules engines just give you a fancy `if` statement. You tell it what data it needs, what conditions the data must meet, and what should happen when it does. The real power is that they let you express your game's logic as independent units, each one explicitly stating what they need in order to run. That lets you reason about them in isolation.
@@ -390,6 +390,7 @@ Advantages compared to Clara:
 * Pararules stores data in `(id, attribute, value)` tuples, whereas Clara uses Clojure records. I think storing each key-value pair as a separate fact leads to a much more flexible system. Technically you could make Clara work this way, but records tend to encourage you to combine data together.
 * Pararules has built-in support for updating facts. You don't even need to explicitly do it; simply inserting a fact with an existing id + attribute combo will cause the old fact to be removed. This is only possible because of the aforementioned use of tuples.
 * Pararules provides a simple `rule` macro that returns an object that can be added to any (or even multiple) sessions. Clara's `defrule` macro creates a global var that is implicitly added to a session. I tried to solve that particular problem with my [clarax](https://github.com/oakes/clarax) library but with pararules it's even cleaner because each rule is completely separate and can be added to a session independently.
+* Pararules makes no distinction between rules and queries — all rules are also queries. Clara has a separate `defquery` macro for making queries, which means potential duplication since queries can often be the same as the "left hand side" of a rule.
 
 Disadvantages compared to Clara:
 
