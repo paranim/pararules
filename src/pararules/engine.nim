@@ -249,10 +249,12 @@ proc rightActivation[T](session: var Session[T], node: var AlphaNode[T], token: 
     node.facts[idAttr] = token.fact
     if not session.idAttrNodes.hasKey(idAttr):
       session.idAttrNodes[idAttr] = initHashSet[ptr AlphaNode[T]]()
-    session.idAttrNodes[idAttr].incl(node.addr)
+    let exists = session.idAttrNodes[idAttr].containsOrIncl(node.addr)
+    assert not exists
   else:
     node.facts.del(idAttr)
-    session.idAttrNodes[idAttr].excl(node.addr)
+    let missing = session.idAttrNodes[idAttr].missingOrExcl(node.addr)
+    assert not missing
   for child in node.successors:
     child.rightActivation(token)
 
