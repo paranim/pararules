@@ -1,4 +1,4 @@
-import strformat, tables, algorithm
+import strformat, tables, algorithm, sets
 
 type
   # facts
@@ -67,7 +67,7 @@ type
     alphaNode: AlphaNode[T]
     betaNode: MemoryNode[T]
     prodNodes*: ref Table[string, MemoryNode[T]]
-    idAttrNodes: ref Table[IdAttr, array[3, AlphaNode[T]]]
+    idAttrNodes: ref Table[IdAttr, HashSet[ptr AlphaNode[T]]]
     insideRule*: bool
     queue: Queue[T]
 
@@ -241,24 +241,22 @@ proc rightActivation[T](node: JoinNode[T], token: Token[T]) =
         for child in node.children:
           child.leftActivation(vars, debugFacts, token)
 
-proc rightActivation[T](session: Session[T], node: AlphaNode[T], token: Token[T]) =
+proc rightActivation[T](session: var Session[T], node: var AlphaNode[T], token: Token[T]) =
   let id = token.fact.id.type0.ord
   let attr = token.fact.attr.type1.ord
   let idAttr = (id, attr)
   if token.insert:
     node.facts[idAttr] = token.fact
     if not session.idAttrNodes.hasKey(idAttr):
-      session.idAttrNodes[idAttr] = cast[array[3, AlphaNode[T]]]([nil, nil, nil])
-    assert session.idAttrNodes[idAttr][node.testField.ord] == nil
-    session.idAttrNodes[idAttr][node.testField.ord] = node
+      session.idAttrNodes[idAttr] = initHashSet[ptr AlphaNode[T]]()
+    session.idAttrNodes[idAttr].incl(node.addr)
   else:
     node.facts.del(idAttr)
-    assert session.idAttrNodes[idAttr][node.testField.ord] != nil
-    session.idAttrNodes[idAttr][node.testField.ord] = nil
+    session.idAttrNodes[idAttr].excl(node.addr)
   for child in node.successors:
     child.rightActivation(token)
 
-proc insertFact[T](session: Session[T], node: AlphaNode[T], fact: Fact[T], root: bool) =
+proc insertFact[T](session: var Session[T], node: var AlphaNode[T], fact: Fact[T], root: bool) =
   if not root:
     let val = case node.testField:
       of Field.Identifier: fact[0]
@@ -266,13 +264,13 @@ proc insertFact[T](session: Session[T], node: AlphaNode[T], fact: Fact[T], root:
       of Field.Value: fact[2]
     if val != node.testValue:
       return
-  for child in node.children:
+  for child in node.children.mitems:
     session.insertFact(child, fact, false)
   if not root:
     session.rightActivation(node, Token[T](fact: fact, insert: true, originalFact: fact))
 
-proc insertFact*[T](session: Session[T], fact: Fact[T])
-proc removeFact*[T](session: Session[T], fact: Fact[T])
+proc insertFact*[T](session: var Session[T], fact: Fact[T])
+proc removeFact*[T](session: var Session[T], fact: Fact[T])
 
 proc emptyQueue[T](session: Session[T]) =
   while true:
@@ -283,31 +281,29 @@ proc emptyQueue[T](session: Session[T]) =
     for (callback, vars) in queue:
       callback(vars)
 
-proc removeIdAttr[T](session: Session[T], id: T, attr: T) =
+proc removeIdAttr[T](session: var Session[T], id: T, attr: T) =
   let id = id.type0.ord
   let attr = attr.type1.ord
   let idAttr = (id, attr)
   if session.idAttrNodes.hasKey(idAttr):
-    for i in 0 ..< session.idAttrNodes[idAttr].len:
-      let node = session.idAttrNodes[idAttr][i]
-      if node != nil:
-        let oldFact = node.facts[idAttr]
-        session.rightActivation(node, Token[T](fact: oldFact, insert: false))
+    for node in session.idAttrNodes[idAttr].items:
+      let oldFact = node.facts[idAttr]
+      session.rightActivation(node[], Token[T](fact: oldFact, insert: false))
 
-proc insertFact*[T](session: Session[T], fact: Fact[T]) =
+proc insertFact*[T](session: var Session[T], fact: Fact[T]) =
   session.removeIdAttr(fact.id, fact.attr)
   session.insertFact(session.alphaNode, fact, true)
   if not session.insideRule:
     session.emptyQueue()
 
-proc removeFact*[T](session: Session[T], fact: Fact[T]) =
+proc removeFact*[T](session: var Session[T], fact: Fact[T]) =
   session.removeIdAttr(fact.id, fact.attr)
 
 proc initSession*[T](): Session[T] =
   result.alphaNode = new(AlphaNode[T])
   result.betaNode = new(MemoryNode[T])
   result.prodNodes = newTable[string, MemoryNode[T]]()
-  result.idAttrNodes = newTable[IdAttr, array[3, AlphaNode[T]]]()
+  result.idAttrNodes = newTable[IdAttr, HashSet[ptr AlphaNode[T]]]()
   new result.queue
 
 proc initProduction*[T, U](name: string, cb: SessionCallbackFn[T], query: QueryFn[T, U]): Production[T, U] =

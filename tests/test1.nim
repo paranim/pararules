@@ -422,6 +422,34 @@ test "conditions can use external values":
 
   check prod.debugFacts.len == 0
 
+test "id + attr combos can be stored in multiple alpha nodes":
+  let rules =
+    ruleset:
+      rule getAlice(Fact):
+        what:
+          (Alice, Color, color)
+          (Alice, Height, height)
+      rule getPerson(Fact):
+        what:
+          (id, Color, color)
+          (id, Height, height)
+
+  var session = initSession(Fact)
+  for r in rules.fields:
+    session.add(r)
+
+  session.insert(Alice, Color, "blue")
+  session.insert(Alice, Height, 60)
+
+  let alice = session.query(rules.getAlice)
+  check alice.color == "blue"
+  check alice.height == 60
+
+  session.remove(Alice, Color, "blue")
+
+  let index = session.find(rules.getAlice)
+  check index == -1
+
 # this one is not used...
 # it's just here to make sure we can define
 # multiple schemas in one module
