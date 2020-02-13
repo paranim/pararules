@@ -311,6 +311,72 @@ rule movePlayer(Fact):
 
 Notice that we aren't even using `DeltaTime` anymore, but we're keeping it in the `what` block so the rule continues to fire every frame. If all tuples in the `what` block have `then = false`, it will never fire. This way, it will move the player exactly one pixel each frame that an arrow key is pressed. Not exactly the best way to do character movement, but you get the idea.
 
+## Tips
+
+Instead of the `getPlayer` rule, we could make a more generic "getter" rule that works for any id:
+
+```nim
+rule getCharacter(Fact):
+  what:
+    (id, X, x)
+    (id, Y, y)
+```
+
+Now, we're making a binding on the id column, and since we're using the same binding symbol ("id") in both, pararules will ensure that they are equal, much like a join in SQL.
+
+We can query it just as before, but if you want to make sure it returns the data for `Player`, you can add that as a filter to the query:
+
+```nim
+let player = session.query(rules.getCharacter, id = Player)
+echo player.x, " ", player.y
+```
+
+Just as before, though, if you are not sure if the necessary facts are there, use `find` + `get` instead:
+
+```nim
+let index = session.find(rules.getCharacter, id = Player)
+if index >= 0:
+  let player = session.get(rules.getCharacter, index)
+  echo player.x, " ", player.y
+```
+
+If you want to find all facts matching the query, you can use `findAll`:
+
+```nim
+let indexes = session.findAll(rules.getCharacter)
+for i in indexes:
+  let ch = session.get(rules.getCharacter, i)
+  echo ch.id, " ", ch.x, " ", ch.y
+```
+
+If you want to reference any external values (such as constants) in the `what` block, you need to quote them, because by default any symbol with a lowercase letter will be interpreted as a binding:
+
+```nim
+const playerId = Player
+
+session.add:
+  rule getPlayer(Fact):
+    what:
+      (`playerId`, X, x)
+      (`playerId`, Y, y)
+```
+
+If you're trying to debug a `cond` block and figure out why it's not working, keep in mind that you can put whatever arbitrary code you want in there. For example, you can make it print out the values by creating a new scope with `block`, as long as the condition itself is the last thing in that scope:
+
+```nim
+rule stopPlayer(Fact):
+  what:
+    (Global, WindowWidth, windowWidth)
+    (Player, X, x)
+  cond:
+    block:
+      echo x, " ", windowWidth # this is one way you can debug the condition
+      x >= float(windowWidth)
+    windowWidth > 0
+  then:
+    session.insert(Player, X, 0.0)
+```
+
 ## Wrap up
 
 In a way, rules engines just give you a fancy `if` statement. You tell it what data it needs, what conditions the data must meet, and what should happen when it does. The real power is that they let you express your game's logic as independent units, each one explicitly stating what they need in order to run. That lets you reason about them in isolation.

@@ -149,6 +149,7 @@ test "conditions":
           (Player, X, x)
         cond:
           x >= float(windowWidth)
+          windowWidth > 0
         then:
           session.insert(Player, X, 0.0)
 
@@ -189,6 +190,7 @@ test "complex types":
           (Player, X, x)
         cond:
           x >= float(windowWidth)
+          windowWidth > 0
         then:
           session.insert(Player, X, 0.0)
 
@@ -205,3 +207,54 @@ test "complex types":
   session.insert(Global, PressedKeys, keys)
 
   check session.query(rules.getPlayer).x == 1.0
+
+test "tips":
+  const playerId = Player
+
+  let rules =
+    ruleset:
+      rule getPlayer(Fact):
+        what:
+          (`playerId`, X, x)
+          (`playerId`, Y, y)
+      rule getCharacter(Fact):
+        what:
+          (id, X, x)
+          (id, Y, y)
+      rule stopPlayer(Fact):
+        what:
+          (Global, WindowWidth, windowWidth)
+          (Player, X, x)
+        cond:
+          block:
+            #echo x, " ", windowWidth
+            x >= float(windowWidth)
+          windowWidth > 0
+        then:
+          session.insert(Player, X, 0.0)
+
+  var session = initSession(Fact)
+  for r in rules.fields:
+    session.add(r)
+
+  session.insert(Global, WindowWidth, 100)
+  session.insert(Player, X, 0.0)
+  session.insert(Player, Y, 1.0)
+
+  let ch = session.query(rules.getCharacter)
+  check ch.id == Player
+  check ch.x == 0.0
+  check ch.y == 1.0
+
+  let player = session.query(rules.getCharacter, id = Player)
+  check player == ch
+
+  let index = session.find(rules.getCharacter, id = Player)
+  check index == 0
+
+  let player2 = session.query(rules.getPlayer)
+  check player2.x == 0.0
+  check player2.y == 1.0
+
+  let indexes = session.findAll(rules.getCharacter)
+  check indexes.len == 1
