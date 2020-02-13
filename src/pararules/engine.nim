@@ -1,4 +1,4 @@
-import strformat, tables, algorithm, sets
+import strformat, tables, algorithm, sets, sequtils
 
 type
   # facts
@@ -288,7 +288,10 @@ proc removeIdAttr[T](session: var Session[T], id: T, attr: T) =
   let attr = attr.type1.ord
   let idAttr = (id, attr)
   if session.idAttrNodes.hasKey(idAttr):
-    for node in session.idAttrNodes[idAttr].items:
+    # rightActivation modifies the HashSet stored in idAttrNodes,
+    # which causes problems since we're still iterating over it.
+    # toSeq seems to fix this by making a copy of the contents of the set
+    for node in session.idAttrNodes[idAttr].items.toSeq:
       let oldFact = node.facts[idAttr]
       session.rightActivation(node[], Token[T](fact: oldFact, insert: false))
 
