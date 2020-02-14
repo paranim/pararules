@@ -4,10 +4,10 @@ from pararules/engine import getParent
 import tables
 
 type
-  Id = enum
+  Id* = enum
     Alice, Bob, Charlie, David, George,
     Seth, Thomas, Xavier, Yair, Zach
-  Attr = enum
+  Attr* = enum
     Color, LeftOf, RightOf, Height, On, Self
 
 schema Fact(Id, Attr):

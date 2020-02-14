@@ -286,7 +286,8 @@ macro query*(session: Session, prod: Production, args: varargs[untyped]): untype
 proc createBranch(dataType: NimNode, index: int, typ: NimNode): NimNode =
   result = newNimNode(nnkOfBranch)
   var list = newNimNode(nnkRecList)
-  list.add(newIdentDefs(ident(typePrefix & $index), typ))
+  let field = postfix(ident(typePrefix & $index), "*")
+  list.add(newIdentDefs(field, typ))
   result.add(ident(dataType.strVal & typeEnumPrefix & $index), list)
 
 proc createEnum(name: NimNode, dataType: NimNode, types: seq[NimNode]): NimNode =
