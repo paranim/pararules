@@ -140,7 +140,7 @@ echo player.x, " ", player.y
 
 ## Avoiding infinite loops
 
-Imagine you want to move the player's position based on its current position. So instead of just using the total time, maybe we want to add the delta time to the player's latest `X` position. If you try this, you might hear your computer's fan get louder:
+Imagine you want to move the player's position based on its current position. So instead of just using the total time, maybe we want to add the delta time to the player's latest `X` position:
 
 ```nim
 rule movePlayer(Fact):
@@ -151,7 +151,7 @@ rule movePlayer(Fact):
     session.insert(Player, X, x + dt)
 ```
 
-That's because you just created an infinite loop. The rule requires the player's `X` position and then updates it, which then causes the rule to fire again. The simple solution is to tell pararules that a certain tuple should not cause a rule's `then` block to re-fire when it updates:
+If you try this, it will crash because you hit Nim's call depth limit for debug builds. That's because you just created an infinite loop. The rule requires the player's `X` position and then updates it, which then causes the rule to fire again. The simple solution is to tell pararules that a certain tuple should not cause a rule's `then` block to re-fire when it updates:
 
 ```nim
 rule movePlayer(Fact):

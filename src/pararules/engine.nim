@@ -275,13 +275,13 @@ proc insertFact*[T](session: var Session[T], fact: Fact[T])
 proc removeFact*[T](session: var Session[T], fact: Fact[T])
 
 proc emptyQueue[T](session: Session[T]) =
-  while true:
-    let queue = session.queue[]
-    if queue.len == 0:
-      break
-    session.queue[] = @[]
-    for (callback, vars) in queue:
-      callback(vars)
+  let queue = session.queue[]
+  if queue.len == 0:
+    return
+  session.queue[] = @[]
+  for (callback, vars) in queue:
+    callback(vars)
+  session.emptyQueue()
 
 proc removeIdAttr[T](session: var Session[T], id: T, attr: T) =
   let id = id.type0.ord
