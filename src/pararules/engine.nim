@@ -26,9 +26,6 @@ type
   QueryFn[T, U] = proc (vars: Vars[T]): U
   FilterFn[T] = proc (vars: Vars[T]): bool
 
-  # `then` blocks to be exected later
-  ThenQueue[T] = ref seq[tuple[node: MemoryNode[T], vars: Vars[T]]]
-
   # alpha network
   AlphaNode[T] = ref object
     testField: Field
@@ -50,7 +47,6 @@ type
       of Prod:
         callback: CallbackFn[T]
         trigger: bool
-        thenQueue: ThenQueue[T]
       else:
         nil
     when not defined(release):
@@ -78,7 +74,7 @@ type
     prodNodes*: ref Table[string, MemoryNode[T]]
     idAttrNodes: ref Table[IdAttr, HashSet[ptr AlphaNode[T]]]
     insideRule*: bool
-    thenQueue: ThenQueue[T]
+    thenQueue: ref seq[tuple[node: MemoryNode[T], vars: Vars[T]]]
 
 proc getParent*(node: MemoryNode): MemoryNode =
   node.parent.parent
@@ -143,7 +139,6 @@ proc add*[T, U](session: Session[T], production: Production[T, U]) =
     if newMemNode.nodeType == Prod:
       var sess = session
       newMemNode.callback = proc (vars: Vars[T]) = production.callback(sess, vars)
-      newMemNode.thenQueue = session.thenQueue
       if session.prodNodes.hasKey(production.name):
         raise newException(Exception, production.name & " already exists in session")
       session.prodNodes[production.name] = newMemNode
@@ -185,17 +180,17 @@ proc performJoinTests(node: JoinNode, vars: Vars, alphaFact: Fact, insert: bool)
       return false
   true
 
-proc leftActivation[T](node: MemoryNode[T], vars: Vars[T], debugFacts: ref seq[Fact[T]], token: Token[T])
+proc leftActivation[T](session: var Session[T], node: MemoryNode[T], vars: Vars[T], debugFacts: ref seq[Fact[T]], token: Token[T])
 
-proc leftActivation[T](node: JoinNode[T], vars: Vars[T], debugFacts: ref seq[Fact[T]], token: Token[T]) =
+proc leftActivation[T](session: var Session[T], node: JoinNode[T], vars: Vars[T], debugFacts: ref seq[Fact[T]], token: Token[T]) =
   for alphaFact in node.alphaNode.facts.values:
     if performJoinTests(node, vars, alphaFact, token.insert):
       var newToken = token
       newToken.fact = alphaFact
       for child in node.children:
-        child.leftActivation(vars, debugFacts, newToken)
+        session.leftActivation(child, vars, debugFacts, newToken)
 
-proc leftActivation[T](node: MemoryNode[T], vars: Vars[T], debugFacts: ref seq[Fact[T]], token: Token[T]) =
+proc leftActivation[T](session: var Session[T], node: MemoryNode[T], vars: Vars[T], debugFacts: ref seq[Fact[T]], token: Token[T]) =
   var newVars = vars
   let success = newVars.getVarsFromFact(node.condition, token.fact)
   assert success
@@ -219,16 +214,16 @@ proc leftActivation[T](node: MemoryNode[T], vars: Vars[T], debugFacts: ref seq[F
 
   if node.nodeType == Prod:
     if token.insert:
-      node.thenQueue[].add((node: node, vars: newVars))
+      session.thenQueue[].add((node: node, vars: newVars))
     else:
-      let index = node.thenQueue[].find((node: node, vars: newVars))
+      let index = session.thenQueue[].find((node: node, vars: newVars))
       if index >= 0:
-        node.thenQueue[].delete(index)
+        session.thenQueue[].delete(index)
   else:
     for child in node.children:
-      child.leftActivation(newVars, debugFacts, token)
+      session.leftActivation(child, newVars, debugFacts, token)
 
-proc rightActivation[T](node: JoinNode[T], token: Token[T]) =
+proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token[T]) =
   when not defined(release):
     proc newRefSeq[T](s: seq[T]): ref seq[T] =
       new(result)
@@ -241,7 +236,7 @@ proc rightActivation[T](node: JoinNode[T], token: Token[T]) =
             newRefSeq(newSeq[Fact[T]]())
           else:
             nil
-        child.leftActivation(initTable[string, T](), debugFacts, token)
+        session.leftActivation(child, initTable[string, T](), debugFacts, token)
   else:
     for i in 0 ..< node.parent.vars.len:
       let vars = node.parent.vars[i]
@@ -252,7 +247,7 @@ proc rightActivation[T](node: JoinNode[T], token: Token[T]) =
           else:
             nil
         for child in node.children:
-          child.leftActivation(vars, debugFacts, token)
+          session.leftActivation(child, vars, debugFacts, token)
 
 proc rightActivation[T](session: var Session[T], node: var AlphaNode[T], token: Token[T]) =
   let id = token.fact.id.type0
@@ -269,7 +264,7 @@ proc rightActivation[T](session: var Session[T], node: var AlphaNode[T], token: 
     let missing = session.idAttrNodes[idAttr].missingOrExcl(node.addr)
     assert not missing
   for child in node.successors:
-    child.rightActivation(token)
+    session.rightActivation(child, token)
 
 proc insertFact[T](session: var Session[T], node: var AlphaNode[T], fact: Fact[T], root: bool) =
   if not root:
