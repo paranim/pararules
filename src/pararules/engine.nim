@@ -26,9 +26,6 @@ type
   QueryFn[T, U] = proc (vars: Vars[T]): U
   FilterFn[T] = proc (vars: Vars[T]): bool
 
-  # facts to be inserted/removed later
-  FactQueue[T] = ref seq[tuple[fact: Fact[T], insert: bool]]
-
   # `then` blocks to be exected later
   ThenQueue[T] = ref seq[tuple[node: MemoryNode[T], vars: Vars[T]]]
 
@@ -81,7 +78,6 @@ type
     prodNodes*: ref Table[string, MemoryNode[T]]
     idAttrNodes: ref Table[IdAttr, HashSet[ptr AlphaNode[T]]]
     insideRule*: bool
-    factQueue: FactQueue[T]
     thenQueue: ThenQueue[T]
 
 proc getParent*(node: MemoryNode): MemoryNode =
@@ -304,7 +300,6 @@ proc insertFact*[T](session: var Session[T], fact: Fact[T])
 proc removeFact*[T](session: var Session[T], fact: Fact[T])
 
 proc emptyQueue[T](session: var Session[T]) =
-  # then queue
   let thenQueue = session.thenQueue[]
   if thenQueue.len == 0:
     return
@@ -313,38 +308,22 @@ proc emptyQueue[T](session: var Session[T]) =
     if node.trigger:
       node.trigger = false
       node.callback(vars)
-  # fact queue
-  let factQueue = session.factQueue[]
-  if factQueue.len == 0:
-    return
-  session.factQueue[] = @[]
-  for (fact, insert) in factQueue:
-    session.removeIdAttr(fact.id, fact.attr)
-    if insert:
-      session.insertFact(session.alphaNode, fact, true)
-  # repeat
   session.emptyQueue()
 
 proc insertFact*[T](session: var Session[T], fact: Fact[T]) =
-  if session.insideRule:
-    session.factQueue[].add((fact, true))
-  else:
-    session.removeIdAttr(fact.id, fact.attr)
-    session.insertFact(session.alphaNode, fact, true)
+  session.removeIdAttr(fact.id, fact.attr)
+  session.insertFact(session.alphaNode, fact, true)
+  if not session.insideRule:
     session.emptyQueue()
 
 proc removeFact*[T](session: var Session[T], fact: Fact[T]) =
-  if session.insideRule:
-    session.factQueue[].add((fact, false))
-  else:
-    session.removeIdAttr(fact.id, fact.attr)
+  session.removeIdAttr(fact.id, fact.attr)
 
 proc initSession*[T](): Session[T] =
   result.alphaNode = new(AlphaNode[T])
   result.betaNode = new(MemoryNode[T])
   result.prodNodes = newTable[string, MemoryNode[T]]()
   result.idAttrNodes = newTable[IdAttr, HashSet[ptr AlphaNode[T]]]()
-  new result.factQueue
   new result.thenQueue
 
 proc initProduction*[T, U](name: string, cb: SessionCallbackFn[T], query: QueryFn[T, U]): Production[T, U] =
