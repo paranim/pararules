@@ -13,16 +13,25 @@ type
       of false:
         nil
   IdAttr = tuple[id: int, attr: int]
+
+  # vars
   Vars[T] = Table[string, T]
   Var* = object
     name*: string
     field: Field
+
+  # functions
   CallbackFn[T] = proc (vars: Vars[T])
   SessionCallbackFn[T] = proc (session: var Session[T], vars: Vars[T])
   QueryFn[T, U] = proc (vars: Vars[T]): U
   FilterFn[T] = proc (vars: Vars[T]): bool
+
+  # facts to be inserted/removed later
   FactQueue[T] = ref seq[tuple[fact: Fact[T], insert: bool]]
+
+  # `then` blocks to be exected later
   ThenQueue[T] = ref seq[tuple[node: MemoryNode[T], vars: Vars[T]]]
+
   # alpha network
   AlphaNode[T] = ref object
     testField: Field
@@ -30,6 +39,7 @@ type
     facts: Table[IdAttr, Fact[T]]
     successors: seq[JoinNode[T]]
     children: seq[AlphaNode[T]]
+
   # beta network
   MemoryNodeType = enum
     Root, Partial, Prod
@@ -53,6 +63,7 @@ type
     children: seq[MemoryNode[T]]
     alphaNode: AlphaNode[T]
     condition: Condition[T]
+
   # session
   Condition[T] = object
     nodes: seq[AlphaNode[T]]
