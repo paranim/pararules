@@ -32,6 +32,9 @@ schema Fact(Id, Attr):
   XChange: float
   YChange: float
 
+proc `==`(a: int, b: Id): bool =
+  a == b.ord
+
 test "your first rule":
   # create rule
   let rule1 =

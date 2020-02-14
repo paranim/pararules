@@ -18,6 +18,9 @@ schema Fact(Id, Attr):
   On: string
   Self: Id
 
+proc `==`(a: int, b: Id): bool =
+  a == b.ord
+
 test "number of conditions != number of facts":
   var session = initSession(Fact)
   session.add:
@@ -140,7 +143,7 @@ test "removing facts":
 
 test "updating facts":
   var session = initSession(Fact)
-  var zVal: Id
+  var zVal: int
   session.add:
     rule updatingFacts(Fact):
       what:
@@ -187,7 +190,7 @@ test "updating facts in different alpha nodes":
 
 test "facts can be stored in multiple alpha nodes":
   var session = initSession(Fact)
-  var alice, zach: Id
+  var alice, zach: int
   session.add:
     rule rule1(Fact):
       what:
@@ -449,6 +452,34 @@ test "id + attr combos can be stored in multiple alpha nodes":
 
   let index = session.find(rules.getAlice)
   check index == -1
+
+test "IDs can be arbitrary integers":
+  let zach = Id.high.ord + 1
+  var session = initSession(Fact)
+  session.add:
+    rule rule1(Fact):
+      what:
+        (b, Color, "blue")
+        (y, LeftOf, z)
+        (a, Color, "maize")
+        (y, RightOf, b)
+        (z, LeftOf, b)
+      then:
+        check a == Alice
+        check b == Bob
+        check y == Yair
+        check z == zach
+
+  let prodNode = session.prodNodes["rule1"]
+
+  session.insert(Bob, Color, "blue")
+  session.insert(Yair, LeftOf, zach)
+  session.insert(Alice, Color, "maize")
+  session.insert(Yair, RightOf, Bob)
+  session.insert(zach, LeftOf, Bob)
+
+  check prodNode.debugFacts.len == 1
+  check prodNode.debugFacts[0].len == 5
 
 # this one is not used...
 # it's just here to make sure we can define

@@ -1,12 +1,16 @@
 import pararules/engine, tables, sets, macros, strutils
 
-const initPrefix = "init"
-const checkPrefix = "check"
-const attrToTypePrefix = "attrToType"
-const typeToNamePrefix = "typeToName"
-const typePrefix = "type"
-const typeEnumPrefix = "Type"
-const enumSuffix = "Kind"
+const
+  initPrefix = "init"
+  checkPrefix = "check"
+  attrToTypePrefix = "attrToType"
+  typeToNamePrefix = "typeToName"
+  typePrefix = "type"
+  typeEnumPrefix = "Type"
+  enumSuffix = "Kind"
+  intTypeNum = 0
+  attrTypeNum = 1
+  idTypeNum = 2
 
 type
   VarInfo = tuple[condNum: int, typeNum: int]
@@ -14,21 +18,21 @@ type
 proc isVar(node: NimNode): bool =
   node.kind == nnkIdent and node.strVal[0].isLowerAscii
 
-proc wrap(parentNode: NimNode, dataType: NimNode, index: int): NimNode =
+proc wrap(parentNode: NimNode, dataType: NimNode, field: Field): NimNode =
   let enumName = ident(dataType.strVal & enumSuffix)
-  let node = parentNode[index]
+  let node = parentNode[field.ord]
   if node.isVar:
     let s = node.strVal
     quote do: Var(name: `s`)
   else:
-    case index:
-      of 0:
-        let enumChoice = newDotExpr(enumName, ident(dataType.strVal & typeEnumPrefix & "0"))
-        quote do: `dataType`(kind: `enumChoice`, type0: `node`)
-      of 1:
-        let enumChoice = newDotExpr(enumName, ident(dataType.strVal & typeEnumPrefix & "1"))
+    case field:
+      of Identifier:
+        let enumChoice = newDotExpr(enumName, ident(dataType.strVal & typeEnumPrefix & $intTypeNum))
+        quote do: `dataType`(kind: `enumChoice`, type0: `node`.ord)
+      of Attribute:
+        let enumChoice = newDotExpr(enumName, ident(dataType.strVal & typeEnumPrefix & $attrTypeNum))
         quote do: `dataType`(kind: `enumChoice`, type1: `node`)
-      else:
+      of Value:
         let
           dataNode = genSym(nskLet, "node")
           checkProc = ident(checkPrefix & dataType.strVal)
@@ -77,9 +81,9 @@ proc getUsedVars(vars: OrderedTable[string, VarInfo], node: NimNode): OrderedTab
 
 proc addCond(dataType: NimNode, vars: OrderedTable[string, VarInfo], prod: NimNode, node: NimNode, filter: NimNode): NimNode =
   expectKind(node, nnkPar)
-  let id = node.wrap(dataType, 0)
-  let attr = node.wrap(dataType, 1)
-  let value = node.wrap(dataType, 2)
+  let id = node.wrap(dataType, Identifier)
+  let attr = node.wrap(dataType, Attribute)
+  let value = node.wrap(dataType, Value)
   let extraArg =
     if node.len == 4:
       expectKind(node[3], nnkExprEqExpr)
@@ -113,8 +117,8 @@ proc parseWhat(name: string, dataType: NimNode, attrs: Table[string, int], types
           raise newException(Exception, "Variables may not be placed in the attribute column")
         let s = child[i].strVal
         let typeNum = case i:
-          of 0: 0
-          of 1: 1
+          of 0: intTypeNum
+          of 1: attrTypeNum
           else: attrs[child[1].strVal]
         if not vars.hasKey(s):
           vars[s] = (condNum, typeNum)
@@ -342,12 +346,19 @@ proc createEqProc(dataType: NimNode, types: seq[NimNode]): NimNode =
     body = newStmtList(body)
   )
 
-proc createNewProc(dataType: NimNode, enumName: NimNode, index: int, typ: NimNode): NimNode =
-  let enumChoice = newDotExpr(enumName, ident(dataType.strVal & typeEnumPrefix & $index))
-  let id = ident(typePrefix & $index)
+proc createInitProc(dataType: NimNode, enumName: NimNode, index: int, typ: NimNode): NimNode =
   let x = ident("x")
-  let body = quote do:
-    `dataType`(kind: `enumChoice`, `id`: `x`)
+  let body =
+    if index == idTypeNum:
+      let enumChoice = newDotExpr(enumName, ident(dataType.strVal & typeEnumPrefix & $intTypeNum))
+      let id = ident(typePrefix & $intTypeNum)
+      quote do:
+        `dataType`(kind: `enumChoice`, `id`: `x`.ord)
+    else:
+      let enumChoice = newDotExpr(enumName, ident(dataType.strVal & typeEnumPrefix & $index))
+      let id = ident(typePrefix & $index)
+      quote do:
+        `dataType`(kind: `enumChoice`, `id`: `x`)
 
   newProc(
     name = postfix(ident(initPrefix & dataType.strVal), "*"),
@@ -358,10 +369,10 @@ proc createNewProc(dataType: NimNode, enumName: NimNode, index: int, typ: NimNod
     body = newStmtList(body)
   )
 
-proc createNewProcs(dataType: NimNode, enumName: NimNode, types: seq[NimNode]): NimNode =
+proc createInitProcs(dataType: NimNode, enumName: NimNode, types: seq[NimNode]): NimNode =
   result = newStmtList()
   for i in 0 ..< types.len:
-    result.add(createNewProc(dataType, enumName, i, types[i]))
+    result.add(createInitProc(dataType, enumName, i, types[i]))
 
 proc createCheckProc(dataType: NimNode, types: seq[NimNode], attrs: Table[string, int]): NimNode =
   let
@@ -375,9 +386,16 @@ proc createCheckProc(dataType: NimNode, types: seq[NimNode], attrs: Table[string
     var branch = newNimNode(nnkOfBranch)
     let correctTypeNum = typeNum.newLit
     let correctTypeName = types[typeNum].strVal
-    let branchBody = quote do:
-      if `value` != `correctTypeNum`:
-        raise newException(Exception, $`attr` & " should be a " & `correctTypeName`)
+    let branchBody =
+      if typeNum == intTypeNum:
+        let correctTypeNameAlt = types[idTypeNum].strVal
+        quote do:
+          if `value` != `correctTypeNum` and `value` != idTypeNum:
+            raise newException(Exception, $`attr` & " should be a " & `correctTypeName` & " or a " & `correctTypeNameAlt`)
+      else:
+        quote do:
+          if `value` != `correctTypeNum`:
+            raise newException(Exception, $`attr` & " should be a " & `correctTypeName`)
     branch.add(ident(typeName), branchBody)
     body.add(branch)
 
@@ -391,7 +409,7 @@ proc createCheckProc(dataType: NimNode, types: seq[NimNode], attrs: Table[string
     body = newStmtList(body)
   )
 
-proc createUpdateProc(dataType: NimNode, idType: NimNode, attrType: NimNode, valueType: NimNode, valueTypeNum: int, procName: string): NimNode =
+proc createUpdateProc(dataType: NimNode, intType: NimNode, attrType: NimNode, idType: NimNode, valueType: NimNode, valueTypeNum: int, procName: string): NimNode =
   let
     procId = ident(procName)
     engineProcId = block:
@@ -417,7 +435,7 @@ proc createUpdateProc(dataType: NimNode, idType: NimNode, attrType: NimNode, val
     params = [
       ident("void"),
       newIdentDefs(session, sessionType),
-      newIdentDefs(id, idType),
+      newIdentDefs(id, infix(idType, "or", intType)),
       newIdentDefs(attr, attrType),
       newIdentDefs(value, valueType)
     ],
@@ -427,7 +445,7 @@ proc createUpdateProc(dataType: NimNode, idType: NimNode, attrType: NimNode, val
 proc createUpdateProcs(dataType: NimNode, types: seq[NimNode], procName: string): NimNode =
   result = newStmtList()
   for i in 0 ..< types.len:
-    result.add(createUpdateProc(dataType, types[0], types[1], types[i], i, procName))
+    result.add(createUpdateProc(dataType, types[0], types[1], types[2], types[i], i, procName))
 
 proc createConstants(dataType: NimNode, types: seq[NimNode], attrs: Table[string, int]): NimNode =
   let attrToTypeId = ident(attrToTypePrefix & dataType.strVal)
@@ -444,11 +462,20 @@ proc createConstants(dataType: NimNode, types: seq[NimNode], attrs: Table[string
 
 macro schema*(sig: untyped, body: untyped): untyped =
   expectKind(sig, nnkCall)
+  if sig.len != 3:
+    raise newException(Exception, "The schema requires two arguments: the id and attribute enums")
+
+  let
+    idType = sig[1]
+    attrType = sig[2]
+    intType = ident("int")
+  expectKind(idType, nnkIdent)
+  expectKind(attrType, nnkIdent)
+
   var types: seq[NimNode]
-  for i in 1 ..< sig.len:
-    let typ = sig[i]
-    expectKind(typ, nnkIdent)
-    types.add(typ)
+  types.add(intType)
+  types.add(attrType)
+  types.add(idType)
 
   expectKind(body, nnkStmtList)
   var attrs: Table[string, int]
@@ -457,7 +484,7 @@ macro schema*(sig: untyped, body: untyped): untyped =
     let attr = pair[0].strVal
     if not attr[0].isUpperAscii:
       raise newException(Exception, attr & " is an invalid attribute name because it must start with an uppercase letter")
-    let typ = pair[1][0]
+    var typ = pair[1][0]
     if typ.kind == nnkBracketExpr:
       let message = """
 All types in the schema must be simple names.
@@ -468,6 +495,8 @@ use `Strings` in the schema.
       raise newException(Exception, message)
     expectKind(typ, nnkIdent)
     assert not (attr in attrs)
+    if typ == idType:
+      typ = intType
     if not (typ in types):
       types.add(typ)
     let index = types.find(typ)
@@ -480,7 +509,7 @@ use `Strings` in the schema.
   newStmtList(
     createTypes(dataType, enumName, types),
     createEqProc(dataType, types),
-    createNewProcs(dataType, enumName, types),
+    createInitProcs(dataType, enumName, types),
     createCheckProc(dataType, types, attrs),
     createUpdateProcs(dataType, types, "insert"),
     createUpdateProcs(dataType, types, "remove"),

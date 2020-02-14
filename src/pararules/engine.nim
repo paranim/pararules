@@ -242,7 +242,7 @@ proc rightActivation[T](node: JoinNode[T], token: Token[T]) =
           child.leftActivation(vars, debugFacts, token)
 
 proc rightActivation[T](session: var Session[T], node: var AlphaNode[T], token: Token[T]) =
-  let id = token.fact.id.type0.ord
+  let id = token.fact.id.type0
   let attr = token.fact.attr.type1.ord
   let idAttr = (id, attr)
   if token.insert:
@@ -284,7 +284,7 @@ proc emptyQueue[T](session: Session[T]) =
   session.emptyQueue()
 
 proc removeIdAttr[T](session: var Session[T], id: T, attr: T) =
-  let id = id.type0.ord
+  let id = id.type0
   let attr = attr.type1.ord
   let idAttr = (id, attr)
   if session.idAttrNodes.hasKey(idAttr):
