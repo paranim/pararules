@@ -146,15 +146,12 @@ proc getVarsFromFact[T](vars: var Vars[T], condition: Condition[T], fact: Fact[T
   for v in condition.vars:
     case v.field:
       of Identifier:
-        if vars.hasKey(v.name) and vars[v.name] != fact[0]:
+        if vars.hasKey(v.name) and vars[v.name].type0 != fact[0].type0:
           return false
         else:
           vars[v.name] = fact[0]
       of Attribute:
-        if vars.hasKey(v.name) and vars[v.name] != fact[1]:
-          return false
-        else:
-          vars[v.name] = fact[1]
+        raise newException(Exception, "Attributes can not contain vars: " & $fact)
       of Value:
         if vars.hasKey(v.name) and vars[v.name] != fact[2]:
           return false
