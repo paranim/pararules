@@ -19,12 +19,12 @@ proc isVar(node: NimNode): bool =
   node.kind == nnkIdent and node.strVal[0].isLowerAscii
 
 proc wrap(parentNode: NimNode, dataType: NimNode, field: Field): NimNode =
-  let enumName = ident(dataType.strVal & enumSuffix)
   let node = parentNode[field.ord]
   if node.isVar:
     let s = node.strVal
     quote do: Var(name: `s`)
   else:
+    let enumName = ident(dataType.strVal & enumSuffix)
     case field:
       of Identifier:
         let enumChoice = newDotExpr(enumName, ident(dataType.strVal & typeEnumPrefix & $intTypeNum))
@@ -36,10 +36,10 @@ proc wrap(parentNode: NimNode, dataType: NimNode, field: Field): NimNode =
         let
           dataNode = genSym(nskLet, "node")
           checkProc = ident(checkPrefix & dataType.strVal)
-          newProc = ident(initPrefix & dataType.strVal)
-          attrName = ident(parentNode[1].strVal)
+          initProc = ident(initPrefix & dataType.strVal)
+          attrName = ident(parentNode[Attribute.ord].strVal)
         quote do:
-          let `dataNode` = `newProc`(`node`)
+          let `dataNode` = `initProc`(`node`)
           when not defined(release):
             `checkProc`(`attrName`, `dataNode`.kind.ord)
           `dataNode`
@@ -246,12 +246,12 @@ proc getDataType(prod: NimNode): NimNode =
 
 proc createParamsArray(dataType: NimNode, args: NimNode): NimNode =
   result = newNimNode(nnkTableConstr)
-  let newProc = ident(initPrefix & dataType.strVal)
+  let initProc = ident(initPrefix & dataType.strVal)
   for arg in args:
     expectKind(arg, nnkExprEqExpr)
     let name = arg[0].strVal.newLit
     let val = arg[1]
-    result.add(newNimNode(nnkExprColonExpr).add(name).add(quote do: `newProc`(`val`)))
+    result.add(newNimNode(nnkExprColonExpr).add(name).add(quote do: `initProc`(`val`)))
 
 macro find*(session: Session, prod: Production, args: varargs[untyped]): untyped =
   let dataType = prod.getDataType
@@ -419,7 +419,7 @@ proc createUpdateProc(dataType: NimNode, intType: NimNode, attrType: NimNode, id
       else:
         bindSym("removeFact")
     checkProcId = ident(checkPrefix & dataType.strVal)
-    newProc = ident(initPrefix & dataType.strVal)
+    initProc = ident(initPrefix & dataType.strVal)
     session = ident("session")
     sessionType = newNimNode(nnkVarTy).add(newNimNode(nnkBracketExpr).add(bindSym("Session")).add(dataType))
     id = ident("id")
@@ -429,7 +429,7 @@ proc createUpdateProc(dataType: NimNode, intType: NimNode, attrType: NimNode, id
     body = quote do:
       when not defined(release):
         `checkProcId`(`attr`, `valueTypeLit`)
-      `engineProcId`(`session`, (`newProc`(`id`), `newProc`(`attr`), `newProc`(`value`)))
+      `engineProcId`(`session`, (`initProc`(`id`), `initProc`(`attr`), `initProc`(`value`)))
 
   newProc(
     name = postfix(procId, "*"),
