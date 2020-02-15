@@ -363,6 +363,34 @@ test "inserting inside a rule is delayed":
   session.insert(Bob, Color, "blue")
   session.insert(Alice, Color, "red")
 
+test "inserting inside a rule can trigger rule more than once":
+  var count = 0
+  let rules =
+    ruleset:
+      rule firstRule(Fact):
+        what:
+          (b, Color, "blue")
+        then:
+          session.insert(Alice, Color, "maize")
+          session.insert(Charlie, Color, "gold")
+      rule secondRule(Fact):
+        what:
+          (Alice, Color, c1)
+          (otherPerson, Color, c2)
+        cond:
+          otherPerson != Alice.ord
+        then:
+          count += 1
+
+  var session = initSession(Fact)
+  for r in rules.fields:
+    session.add(r)
+
+  session.insert(Alice, Color, "red")
+  session.insert(Bob, Color, "blue")
+
+  check count == 3
+
 test "inserting inside a rule cascades":
   let rules =
     ruleset:

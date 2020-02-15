@@ -1,4 +1,4 @@
-import strformat, tables, algorithm, sets, sequtils
+import strformat, tables, algorithm, sets
 
 type
   # facts
@@ -74,7 +74,7 @@ type
     prodNodes*: ref Table[string, MemoryNode[T]]
     idAttrNodes: ref Table[IdAttr, HashSet[ptr AlphaNode[T]]]
     insideRule*: bool
-    thenQueue: ref seq[tuple[node: MemoryNode[T], vars: Vars[T]]]
+    thenQueue: ref seq[tuple[node: MemoryNode[T], vars: Vars[T], trigger: bool]]
 
 proc getParent*(node: MemoryNode): MemoryNode =
   node.parent.parent
@@ -214,9 +214,9 @@ proc leftActivation[T](session: var Session[T], node: MemoryNode[T], vars: Vars[
 
   if node.nodeType == Prod:
     if token.insert:
-      session.thenQueue[].add((node: node, vars: newVars))
+      session.thenQueue[].add((node: node, vars: newVars, trigger: node.trigger))
     else:
-      let index = session.thenQueue[].find((node: node, vars: newVars))
+      let index = session.thenQueue[].find((node: node, vars: newVars, trigger: true))
       if index >= 0:
         session.thenQueue[].delete(index)
   else:
@@ -284,32 +284,31 @@ proc removeIdAttr[T](session: var Session[T], id: T, attr: T) =
   let attr = attr.type1.ord
   let idAttr = (id, attr)
   if session.idAttrNodes.hasKey(idAttr):
-    # rightActivation modifies the HashSet stored in idAttrNodes,
-    # which causes problems since we're still iterating over it.
-    # toSeq seems to fix this by making a copy of the contents of the set
-    for node in session.idAttrNodes[idAttr].items.toSeq:
+    # copy the set into a seq since rightActivation will be modifying the set
+    var idAttrNodes: seq[ptr AlphaNode[T]]
+    for node in session.idAttrNodes[idAttr].items:
+      idAttrNodes.add(node)
+    # right activate each node
+    for node in idAttrNodes:
       let oldFact = node.facts[idAttr]
       session.rightActivation(node[], Token[T](fact: oldFact, insert: false))
 
-proc insertFact*[T](session: var Session[T], fact: Fact[T])
-proc removeFact*[T](session: var Session[T], fact: Fact[T])
-
-proc emptyQueue[T](session: var Session[T]) =
+proc triggerThenBlocks[T](session: var Session[T]) =
   let thenQueue = session.thenQueue[]
   if thenQueue.len == 0:
     return
   session.thenQueue[] = @[]
-  for (node, vars) in thenQueue:
-    if node.trigger:
-      node.trigger = false
-      node.callback(vars)
-  session.emptyQueue()
+  for event in thenQueue:
+    if event.trigger:
+      event.node.trigger = false
+      event.node.callback(event.vars)
+  session.triggerThenBlocks()
 
 proc insertFact*[T](session: var Session[T], fact: Fact[T]) =
   session.removeIdAttr(fact.id, fact.attr)
   session.insertFact(session.alphaNode, fact, true)
   if not session.insideRule:
-    session.emptyQueue()
+    session.triggerThenBlocks()
 
 proc removeFact*[T](session: var Session[T], fact: Fact[T]) =
   session.removeIdAttr(fact.id, fact.attr)
