@@ -230,6 +230,22 @@ test "complex conditions":
   session.insert(Yair, LeftOf, Charlie)
   check prodNode.debugFacts.len == 1
 
+test "out-of-order joins between id and value":
+  var session = initSession(Fact)
+  session.add:
+    rule rule1(Fact):
+      what:
+        (b, RightOf, Alice)
+        (y, RightOf, b)
+        (b, Color, "blue")
+
+  let prodNode = session.prodNodes["rule1"]
+
+  session.insert(Bob, RightOf, Alice)
+  session.insert(Bob, Color, "blue")
+  session.insert(Yair, RightOf, Bob)
+  check prodNode.debugFacts.len == 1
+
 # this was failing because we weren't testing conditions
 # in join nodes who are children of the root memory node
 test "simple conditions":
