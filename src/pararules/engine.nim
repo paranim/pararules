@@ -5,13 +5,7 @@ type
   Field* = enum
     Identifier, Attribute, Value
   Fact[T] = tuple[id: T, attr: T, value: T]
-  Token[T] = object
-    fact: Fact[T]
-    case insert: bool
-      of true:
-        originalFact: Fact[T]
-      of false:
-        nil
+  Token[T] = tuple[fact: Fact[T], insert: bool]
   IdAttr = tuple[id: int, attr: int]
 
   # vars
@@ -42,7 +36,6 @@ type
     children: seq[JoinNode[T]]
     vars*: seq[Vars[T]]
     condition: Condition[T]
-    prodNode: MemoryNode[T]
     case nodeType: MemoryNodeType
       of Prod:
         callback: CallbackFn[T]
@@ -56,6 +49,7 @@ type
     children: seq[MemoryNode[T]]
     alphaNode: AlphaNode[T]
     condition: Condition[T]
+    prodNode: MemoryNode[T]
 
   # session
   Condition[T] = object
@@ -74,7 +68,7 @@ type
     prodNodes*: ref Table[string, MemoryNode[T]]
     idAttrNodes: ref Table[IdAttr, HashSet[ptr AlphaNode[T]]]
     insideRule*: bool
-    thenQueue: ref seq[tuple[node: MemoryNode[T], vars: Vars[T], trigger: bool]]
+    thenQueue: ref seq[tuple[node: MemoryNode[T], vars: Vars[T]]]
 
 proc getParent*(node: MemoryNode): MemoryNode =
   node.parent.parent
@@ -124,7 +118,7 @@ proc isAncestor(x, y: JoinNode): bool =
 
 proc add*[T, U](session: Session[T], production: Production[T, U]) =
   var memNode = session.betaNode
-  var memNodes: seq[MemoryNode[T]]
+  var joinNodes: seq[JoinNode[T]]
   let last = production.conditions.len - 1
   for i in 0 .. last:
     var condition = production.conditions[i]
@@ -142,10 +136,10 @@ proc add*[T, U](session: Session[T], production: Production[T, U]) =
       if session.prodNodes.hasKey(production.name):
         raise newException(Exception, production.name & " already exists in session")
       session.prodNodes[production.name] = newMemNode
-    memNodes.add(newMemNode)
+    joinNodes.add(joinNode)
     joinNode.children.add(newMemNode)
     memNode = newMemNode
-  for node in memNodes:
+  for node in joinNodes:
     node.prodNode = memNode
 
 proc getVarsFromFact[T](vars: var Vars[T], condition: Condition[T], fact: Fact[T]): bool =
@@ -209,14 +203,12 @@ proc leftActivation[T](session: var Session[T], node: MemoryNode[T], vars: Vars[
       when not defined(release):
         node.debugFacts.delete(index)
 
-  if token.insert and node.condition.shouldTrigger and token.fact == token.originalFact:
-    node.prodNode.trigger = true
-
   if node.nodeType == Prod:
     if token.insert:
-      session.thenQueue[].add((node: node, vars: newVars, trigger: node.trigger))
+      if node.trigger:
+        session.thenQueue[].add((node: node, vars: newVars))
     else:
-      let index = session.thenQueue[].find((node: node, vars: newVars, trigger: true))
+      let index = session.thenQueue[].find((node: node, vars: newVars))
       if index >= 0:
         session.thenQueue[].delete(index)
   else:
@@ -224,6 +216,8 @@ proc leftActivation[T](session: var Session[T], node: MemoryNode[T], vars: Vars[
       session.leftActivation(child, newVars, debugFacts, token)
 
 proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token[T]) =
+  if token.insert and node.condition.shouldTrigger:
+    node.prodNode.trigger = true
   when not defined(release):
     proc newRefSeq[T](s: seq[T]): ref seq[T] =
       new(result)
@@ -277,7 +271,7 @@ proc insertFact[T](session: var Session[T], node: var AlphaNode[T], fact: Fact[T
   for child in node.children.mitems:
     session.insertFact(child, fact, false)
   if not root:
-    session.rightActivation(node, Token[T](fact: fact, insert: true, originalFact: fact))
+    session.rightActivation(node, (fact: fact, insert: true))
 
 proc removeIdAttr[T](session: var Session[T], id: T, attr: T) =
   let id = id.type0
@@ -291,17 +285,16 @@ proc removeIdAttr[T](session: var Session[T], id: T, attr: T) =
     # right activate each node
     for node in idAttrNodes:
       let oldFact = node.facts[idAttr]
-      session.rightActivation(node[], Token[T](fact: oldFact, insert: false))
+      session.rightActivation(node[], (fact: oldFact, insert: false))
 
 proc triggerThenBlocks[T](session: var Session[T]) =
   let thenQueue = session.thenQueue[]
   if thenQueue.len == 0:
     return
   session.thenQueue[] = @[]
-  for event in thenQueue:
-    if event.trigger:
-      event.node.trigger = false
-      event.node.callback(event.vars)
+  for (node, vars) in thenQueue:
+    node.trigger = false
+    node.callback(vars)
   session.triggerThenBlocks()
 
 proc insertFact*[T](session: var Session[T], fact: Fact[T]) =
