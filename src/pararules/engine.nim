@@ -240,14 +240,15 @@ proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token
       new(result)
       result[] = s
   if node.parent.nodeType == Root:
-    if performJoinTests(node, Vars[T](), token.fact, token.insert):
+    let vars = Vars[T]()
+    if performJoinTests(node, vars, token.fact, token.insert):
       for child in node.children:
         let debugFacts: ref seq[Fact[T]] =
           when not defined(release):
             newRefSeq(newSeq[Fact[T]]())
           else:
             nil
-        session.leftActivation(child, initTable[string, T](), debugFacts, token)
+        session.leftActivation(child, vars, debugFacts, token)
   else:
     for i in 0 ..< node.parent.vars.len:
       let vars = node.parent.vars[i]
