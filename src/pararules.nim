@@ -66,6 +66,19 @@ proc parseCond(vars: OrderedTable[string, VarInfo], node: NimNode): Table[int, N
     var condNum = 0
     for ident in condNode.getVarsInNode:
       if vars.hasKey(ident):
+        # this makes the filter occur at the earliest possible time,
+        # by finding the maximum condNum of the vars contained in it.
+        # for example, if you have the following:
+        #
+        # what:
+        #   (Alice, Color, a)
+        #   (Bob, Color, b)
+        #   (Charlie, Color, c)
+        # cond:
+        #   a != b
+        #
+        # the condNum for `a != b` should be 1, which is the one containing Bob,
+        # because it doesn't require `c` to be run
         condNum = max(condNum, vars[ident].condNum)
     if result.hasKey(condNum):
       let prevCond = result[condNum]
