@@ -40,7 +40,7 @@ type
       of Prod:
         callback: CallbackFn[T]
         trigger: bool
-        thenQueue: seq[Vars[T]]
+        thenQueue: seq[bool]
       else:
         nil
     when not defined(release):
@@ -214,18 +214,17 @@ proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: V
     node.vars.add(newVars)
     when not defined(release):
       node.debugFacts.add(debugFacts[])
-    if node.nodeType == Prod and node.trigger:
-      node.thenQueue.add(newVars)
-      session.thenNodes[].incl(node.addr)
+    if node.nodeType == Prod:
+      node.thenQueue.add(node.trigger)
+      if node.trigger:
+        session.thenNodes[].incl(node.addr)
   else:
     let index = node.vars.find(newVars)
     if index >= 0:
       node.vars.delete(index)
       when not defined(release):
         node.debugFacts.delete(index)
-    if node.nodeType == Prod:
-      let index = node.thenQueue.find(newVars)
-      if index >= 0:
+      if node.nodeType == Prod:
         node.thenQueue.delete(index)
 
   if node.nodeType != Prod:
@@ -318,15 +317,16 @@ proc triggerThenBlocks[T](session: var Session[T]) =
   if thenNodes.len == 0:
     return
   session.thenNodes[].clear
-  # collect all nodes/vars
+  # collect all nodes/vars to be executed
   var thenQueue: seq[(MemoryNode[T], Vars[T])]
   for node in thenNodes:
-    for vars in node.thenQueue:
-      thenQueue.add((node: node[], vars: vars))
-    node.thenQueue = @[]
-  # execute then blocks
-  for (node, vars) in thenQueue:
     node.trigger = false
+    for i in 0 ..< node.thenQueue.len:
+      if node.thenQueue[i]:
+        thenQueue.add((node: node[], vars: node.vars[i]))
+        node.thenQueue[i] = false
+  # execute `then` blocks
+  for (node, vars) in thenQueue:
     node.callback(vars)
   # recur because there may be new `then` blocks to execute
   session.triggerThenBlocks()
