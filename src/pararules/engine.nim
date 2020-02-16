@@ -33,7 +33,7 @@ type
     Root, Partial, Prod
   MemoryNode[T] = ref object
     parent: JoinNode[T]
-    children: seq[JoinNode[T]]
+    child: JoinNode[T]
     vars*: seq[Vars[T]]
     condition: Condition[T]
     case nodeType: MemoryNodeType
@@ -47,7 +47,7 @@ type
       debugFacts*: seq[seq[Fact[T]]]
   JoinNode[T] = ref object
     parent: MemoryNode[T]
-    children: seq[MemoryNode[T]]
+    child: MemoryNode[T]
     alphaNode: AlphaNode[T]
     condition: Condition[T]
     prodNode: MemoryNode[T]
@@ -133,7 +133,7 @@ proc add*[T, U](session: Session[T], production: Production[T, U]) =
           joinNode.idName = v.name
       else:
         tests.incl(v.name)
-    memNode.children.add(joinNode)
+    memNode.child = joinNode
     leafNode.successors.add(joinNode)
     # successors must be sorted by ancestry (descendents first) to avoid duplicate rule firings
     leafNode.successors.sort(proc (x, y: JoinNode[T]): int =
@@ -146,7 +146,7 @@ proc add*[T, U](session: Session[T], production: Production[T, U]) =
         raise newException(Exception, production.name & " already exists in session")
       session.prodNodes[production.name] = newMemNode
     joinNodes.add(joinNode)
-    joinNode.children.add(newMemNode)
+    joinNode.child = newMemNode
     memNode = newMemNode
   for node in joinNodes:
     node.prodNode = memNode
@@ -191,16 +191,14 @@ proc leftActivation[T](session: var Session[T], node: JoinNode[T], vars: Vars[T]
         if performJoinTests(node, vars, alphaFact, token.insert):
           var newToken = token
           newToken.fact = alphaFact
-          for child in node.children.mitems:
-            session.leftActivation(child, vars, debugFacts, newToken)
+          session.leftActivation(node.child, vars, debugFacts, newToken)
   else:
     for factsForId in node.alphaNode.facts.values:
       for alphaFact in factsForId.values:
         if performJoinTests(node, vars, alphaFact, token.insert):
           var newToken = token
           newToken.fact = alphaFact
-          for child in node.children.mitems:
-            session.leftActivation(child, vars, debugFacts, newToken)
+          session.leftActivation(node.child, vars, debugFacts, newToken)
 
 proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: Vars[T], debugFacts: ref seq[Fact[T]], token: Token[T]) =
   var newVars = vars
@@ -228,8 +226,7 @@ proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: V
         node.thenQueue.delete(index)
 
   if node.nodeType != Prod:
-    for child in node.children:
-      session.leftActivation(child, newVars, debugFacts, token)
+    session.leftActivation(node.child, newVars, debugFacts, token)
 
 proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token[T]) =
   if token.insert and node.condition.shouldTrigger:
@@ -241,13 +238,12 @@ proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token
   if node.parent.nodeType == Root:
     let vars = Vars[T]()
     if performJoinTests(node, vars, token.fact, token.insert):
-      for child in node.children.mitems:
-        let debugFacts: ref seq[Fact[T]] =
-          when not defined(release):
-            newRefSeq(newSeq[Fact[T]]())
-          else:
-            nil
-        session.leftActivation(child, vars, debugFacts, token)
+      let debugFacts: ref seq[Fact[T]] =
+        when not defined(release):
+          newRefSeq(newSeq[Fact[T]]())
+        else:
+          nil
+      session.leftActivation(node.child, vars, debugFacts, token)
   else:
     for i in 0 ..< node.parent.vars.len:
       let vars = node.parent.vars[i]
@@ -260,8 +256,7 @@ proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token
             newRefSeq(node.parent.debugFacts[i])
           else:
             nil
-        for child in node.children.mitems:
-          session.leftActivation(child, vars, debugFacts, token)
+        session.leftActivation(node.child, vars, debugFacts, token)
 
 proc rightActivation[T](session: var Session[T], node: var AlphaNode[T], token: Token[T]) =
   let id = token.fact.id.type0
