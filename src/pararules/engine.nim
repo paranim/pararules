@@ -140,8 +140,9 @@ proc add*[T, U](session: Session[T], production: Production[T, U]) =
       if isAncestor(x, y): 1 else: -1)
     var newMemNode = MemoryNode[T](parent: joinNode, nodeType: if i == last: Prod else: Partial, condition: condition)
     if newMemNode.nodeType == Prod:
-      var sess = session
-      newMemNode.callback = proc (vars: Vars[T]) = production.callback(sess, vars)
+      if production.callback != nil:
+        var sess = session
+        newMemNode.callback = proc (vars: Vars[T]) = production.callback(sess, vars)
       if session.prodNodes.hasKey(production.name):
         raise newException(Exception, production.name & " already exists in session")
       session.prodNodes[production.name] = newMemNode
@@ -212,7 +213,7 @@ proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: V
     node.vars.add(newVars)
     when not defined(release):
       node.debugFacts.add(debugFacts[])
-    if node.nodeType == Prod:
+    if node.nodeType == Prod and node.callback != nil:
       node.thenQueue.add(node.trigger)
       if node.trigger:
         session.thenNodes[].incl(node.addr)
@@ -222,7 +223,7 @@ proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: V
       node.vars.delete(index)
       when not defined(release):
         node.debugFacts.delete(index)
-      if node.nodeType == Prod:
+      if node.nodeType == Prod and node.callback != nil:
         node.thenQueue.delete(index)
 
   if node.nodeType != Prod:

@@ -172,10 +172,9 @@ proc parseWhat(name: string, dataType: NimNode, attrs: Table[string, int], types
     )
   else:
     result = newStmtList(quote do:
-      let `callback` = proc (`session`: var Session[`dataType`], `v`: Table[string, `dataType`]) = discard
       let `query` = proc (`v2`: Table[string, `dataType`]): `tupleType` =
         `queryBody`
-      var `prod` = initProduction[`dataType`, `tupleType`](`name`, `callback`, `query`)
+      var `prod` = initProduction[`dataType`, `tupleType`](`name`, nil, `query`)
     )
 
   for condNum in 0 ..< node.len:
