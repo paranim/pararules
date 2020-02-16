@@ -40,6 +40,7 @@ type
       of Prod:
         callback: CallbackFn[T]
         trigger: bool
+        thenQueue: seq[Vars[T]]
       else:
         nil
     when not defined(release):
@@ -69,7 +70,7 @@ type
     prodNodes*: ref Table[string, MemoryNode[T]]
     idAttrNodes: ref Table[IdAttr, HashSet[ptr AlphaNode[T]]]
     insideRule*: bool
-    thenQueue: ref seq[tuple[node: MemoryNode[T], vars: Vars[T]]]
+    thenNodes: ref HashSet[ptr MemoryNode[T]]
 
 proc getParent*(node: MemoryNode): MemoryNode =
   node.parent.parent
@@ -179,7 +180,7 @@ proc performJoinTests(node: JoinNode, vars: Vars, alphaFact: Fact, insert: bool)
       return false
   true
 
-proc leftActivation[T](session: var Session[T], node: MemoryNode[T], vars: Vars[T], debugFacts: ref seq[Fact[T]], token: Token[T])
+proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: Vars[T], debugFacts: ref seq[Fact[T]], token: Token[T])
 
 proc leftActivation[T](session: var Session[T], node: JoinNode[T], vars: Vars[T], debugFacts: ref seq[Fact[T]], token: Token[T]) =
   # SHORTCUT: if we know the id, only loop over alpha facts with that id
@@ -190,7 +191,7 @@ proc leftActivation[T](session: var Session[T], node: JoinNode[T], vars: Vars[T]
         if performJoinTests(node, vars, alphaFact, token.insert):
           var newToken = token
           newToken.fact = alphaFact
-          for child in node.children:
+          for child in node.children.mitems:
             session.leftActivation(child, vars, debugFacts, newToken)
   else:
     for factsForId in node.alphaNode.facts.values:
@@ -198,10 +199,10 @@ proc leftActivation[T](session: var Session[T], node: JoinNode[T], vars: Vars[T]
         if performJoinTests(node, vars, alphaFact, token.insert):
           var newToken = token
           newToken.fact = alphaFact
-          for child in node.children:
+          for child in node.children.mitems:
             session.leftActivation(child, vars, debugFacts, newToken)
 
-proc leftActivation[T](session: var Session[T], node: MemoryNode[T], vars: Vars[T], debugFacts: ref seq[Fact[T]], token: Token[T]) =
+proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: Vars[T], debugFacts: ref seq[Fact[T]], token: Token[T]) =
   var newVars = vars
   let success = newVars.getVarsFromFact(node.condition, token.fact)
   assert success
@@ -213,22 +214,21 @@ proc leftActivation[T](session: var Session[T], node: MemoryNode[T], vars: Vars[
     node.vars.add(newVars)
     when not defined(release):
       node.debugFacts.add(debugFacts[])
+    if node.nodeType == Prod and node.trigger:
+      node.thenQueue.add(newVars)
+      session.thenNodes[].incl(node.addr)
   else:
     let index = node.vars.find(newVars)
     if index >= 0:
       node.vars.delete(index)
       when not defined(release):
         node.debugFacts.delete(index)
-
-  if node.nodeType == Prod:
-    if token.insert:
-      if node.trigger:
-        session.thenQueue[].add((node: node, vars: newVars))
-    else:
-      let index = session.thenQueue[].find((node: node, vars: newVars))
+    if node.nodeType == Prod:
+      let index = node.thenQueue.find(newVars)
       if index >= 0:
-        session.thenQueue[].delete(index)
-  else:
+        node.thenQueue.delete(index)
+
+  if node.nodeType != Prod:
     for child in node.children:
       session.leftActivation(child, newVars, debugFacts, token)
 
@@ -242,7 +242,7 @@ proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token
   if node.parent.nodeType == Root:
     let vars = Vars[T]()
     if performJoinTests(node, vars, token.fact, token.insert):
-      for child in node.children:
+      for child in node.children.mitems:
         let debugFacts: ref seq[Fact[T]] =
           when not defined(release):
             newRefSeq(newSeq[Fact[T]]())
@@ -261,7 +261,7 @@ proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token
             newRefSeq(node.parent.debugFacts[i])
           else:
             nil
-        for child in node.children:
+        for child in node.children.mitems:
           session.leftActivation(child, vars, debugFacts, token)
 
 proc rightActivation[T](session: var Session[T], node: var AlphaNode[T], token: Token[T]) =
@@ -311,13 +311,24 @@ proc removeIdAttr[T](session: var Session[T], id: T, attr: T) =
       session.rightActivation(node[], (fact: oldFact, insert: false))
 
 proc triggerThenBlocks[T](session: var Session[T]) =
-  let thenQueue = session.thenQueue[]
-  if thenQueue.len == 0:
+  # find all nodes with `then` blocks that need executed
+  var thenNodes: seq[ptr MemoryNode[T]]
+  for node in session.thenNodes[].items:
+    thenNodes.add(node)
+  if thenNodes.len == 0:
     return
-  session.thenQueue[] = @[]
+  session.thenNodes[].clear
+  # collect all nodes/vars
+  var thenQueue: seq[(MemoryNode[T], Vars[T])]
+  for node in thenNodes:
+    for vars in node.thenQueue:
+      thenQueue.add((node: node[], vars: vars))
+    node.thenQueue = @[]
+  # execute then blocks
   for (node, vars) in thenQueue:
     node.trigger = false
     node.callback(vars)
+  # recur because there may be new `then` blocks to execute
   session.triggerThenBlocks()
 
 proc insertFact*[T](session: var Session[T], fact: Fact[T]) =
@@ -334,7 +345,8 @@ proc initSession*[T](): Session[T] =
   result.betaNode = new(MemoryNode[T])
   result.prodNodes = newTable[string, MemoryNode[T]]()
   result.idAttrNodes = newTable[IdAttr, HashSet[ptr AlphaNode[T]]]()
-  new result.thenQueue
+  new result.thenNodes
+  result.thenNodes[] = initHashSet[ptr MemoryNode[T]]()
 
 proc initProduction*[T, U](name: string, cb: SessionCallbackFn[T], query: QueryFn[T, U]): Production[T, U] =
   result.name = name
