@@ -159,7 +159,7 @@ proc getVarsFromFact[T](vars: var Vars[T], condition: Condition[T], fact: Fact[T
         else:
           vars[v.name] = fact[0]
       of Attribute:
-        raise newException(Exception, "Attributes can not contain vars: " & $fact)
+        raise newException(Exception, "Attributes can not contain vars: " & $v)
       of Value:
         if vars.hasKey(v.name) and vars[v.name] != fact[2]:
           return false
