@@ -210,7 +210,7 @@ rule stopPlayer(Fact):
 
 Notice that we *don't* need `then = false` this time, because the condition is preventing the rule from re-firing (unless the `windowWidth` is 0, that is!).
 
-While the above code works, it is not ideal. If you have a condition like the one above, it is better to place it in a special `cond` block:
+While the above code works, you can also put your condition in a special `cond` block:
 
 ```nim
 rule stopPlayer(Fact):
@@ -222,8 +222,6 @@ rule stopPlayer(Fact):
   then:
     session.insert(Player, X, 0.0)
 ```
-
-Not only does this read more nicely, it may actually be faster. This is because, by specifying the condition there, pararules can run the condition earlier, rather than wait until all facts are matched and the `then` block is fired.
 
 You can add as many conditions as you want, and they will implicitly work as if they were combined together with `and`:
 
@@ -238,8 +236,6 @@ rule stopPlayer(Fact):
   then:
     session.insert(Player, X, 0.0)
 ```
-
-It is better to do it that way than to write `x >= float(windowWidth) and windowWidth > 0` on one line, because it gives pararules the opportunity to run each condition at the optimal time. If you need the conditions to work with an `or`, though, you will need to put them together in that way.
 
 ## Complex types
 

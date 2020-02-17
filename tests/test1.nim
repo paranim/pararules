@@ -218,7 +218,7 @@ test "facts can be stored in multiple alpha nodes":
 
 test "complex conditions":
   var session = initSession(Fact)
-  session.add:
+  let rule1 =
     rule complexCond(Fact):
       what:
         (b, Color, "blue")
@@ -227,33 +227,31 @@ test "complex conditions":
         (y, RightOf, b)
       cond:
         z != Zach
-
-  let prodNode = session.prodNodes["complexCond"]
+  session.add(rule1)
 
   session.insert(Bob, Color, "blue")
   session.insert(Yair, LeftOf, Zach)
   session.insert(Alice, Color, "maize")
   session.insert(Yair, RightOf, Bob)
-  check prodNode.debugFacts.len == 0
+  check session.findAll(rule1).len == 0
 
   session.insert(Yair, LeftOf, Charlie)
-  check prodNode.debugFacts.len == 1
+  check session.findAll(rule1).len == 1
 
 test "out-of-order joins between id and value":
   var session = initSession(Fact)
-  session.add:
+  let rule1 =
     rule rule1(Fact):
       what:
         (b, RightOf, Alice)
         (y, RightOf, b)
         (b, Color, "blue")
-
-  let prodNode = session.prodNodes["rule1"]
+  session.add(rule1)
 
   session.insert(Bob, RightOf, Alice)
   session.insert(Bob, Color, "blue")
   session.insert(Yair, RightOf, Bob)
-  check prodNode.debugFacts.len == 1
+  check session.findAll(rule1).len == 1
 
 # this was failing because we weren't testing conditions
 # in join nodes who are children of the root memory node
@@ -450,14 +448,13 @@ test "inserting inside a rule cascades":
 test "conditions can use external values":
   var session = initSession(Fact)
   var allowRuleToFire = false
-  session.add:
+  let rule1 =
     rule rule1(Fact):
       what:
         (a, LeftOf, b)
       cond:
         allowRuleToFire
-
-  let prod = session.prodNodes["rule1"]
+  session.add(rule1)
 
   session.insert(Alice, LeftOf, Zach)
   allowRuleToFire = true
@@ -466,8 +463,7 @@ test "conditions can use external values":
   # in leftActivation would succeed.
   session.insert(Alice, LeftOf, Bob)
 
-  check prod.debugFacts.len == 1
-  check prod.debugFacts[0].len == 1
+  check session.findAll(rule1).len == 1
 
   # now we prevent the rule from firing again,
   # but the old "Alice, LeftOf, Bob" fact
@@ -476,7 +472,7 @@ test "conditions can use external values":
   allowRuleToFire = false
   session.insert(Alice, LeftOf, Zach)
 
-  check prod.debugFacts.len == 0
+  check session.findAll(rule1).len == 0
 
 test "id + attr combos can be stored in multiple alpha nodes":
   let rules =

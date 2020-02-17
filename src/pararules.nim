@@ -60,39 +60,22 @@ proc getVarsInNode(node: NimNode): HashSet[string] =
   for child in node:
     result = result.union(child.getVarsInNode)
 
-proc parseCond(vars: OrderedTable[string, VarInfo], node: NimNode): Table[int, NimNode] =
+proc parseCond(node: NimNode): NimNode =
   expectKind(node, nnkStmtList)
   for condNode in node:
-    var condNum = 0
-    for ident in condNode.getVarsInNode:
-      if vars.hasKey(ident):
-        # this makes the filter occur at the earliest possible time,
-        # by finding the maximum condNum of the vars contained in it.
-        # for example, if you have the following:
-        #
-        # what:
-        #   (Alice, Color, a)
-        #   (Bob, Color, b)
-        #   (Charlie, Color, c)
-        # cond:
-        #   a != b
-        #
-        # the condNum for `a != b` should be 1, which is the one containing Bob,
-        # because it doesn't require `c` to be run
-        condNum = max(condNum, vars[ident].condNum)
-    if result.hasKey(condNum):
-      let prevCond = result[condNum]
-      result[condNum] = quote do:
-        `prevCond` and `condNode`
+    if result == nil:
+      result = condNode
     else:
-      result[condNum] = condNode
+      let prevCond = result
+      result = quote do:
+        `prevCond` and `condNode`
 
 proc getUsedVars(vars: OrderedTable[string, VarInfo], node: NimNode): OrderedTable[string, VarInfo] =
   for v in node.getVarsInNode:
     if vars.hasKey(v):
       result[v] = vars[v]
 
-proc addCond(dataType: NimNode, vars: OrderedTable[string, VarInfo], prod: NimNode, node: NimNode, filter: NimNode): NimNode =
+proc addCond(dataType: NimNode, vars: OrderedTable[string, VarInfo], prod: NimNode, node: NimNode): NimNode =
   expectKind(node, nnkPar)
   let id = node.wrap(dataType, Identifier)
   let attr = node.wrap(dataType, Attribute)
@@ -105,19 +88,8 @@ proc addCond(dataType: NimNode, vars: OrderedTable[string, VarInfo], prod: NimNo
       raise newException(Exception, "Too many arguments inside 'what' condition")
     else:
       newNimNode(nnkExprEqExpr).add(ident("then")).add(true.newLit)
-  if filter != nil:
-    let fn = genSym(nskLet, "fn")
-    let v = genSym(nskParam, "v")
-    let usedVars = getUsedVars(vars, filter)
-    let varNode = createVars(usedVars, v)
-    quote do:
-      let `fn` = proc (`v`: Table[string, `dataType`]): bool =
-        `varNode`
-        `filter`
-      add(`prod`, `id`, `attr`, `value`, `fn`, `extraArg`)
-  else:
-    quote do:
-      add(`prod`, `id`, `attr`, `value`, nil, `extraArg`)
+  quote do:
+    add(`prod`, `id`, `attr`, `value`, `extraArg`)
 
 proc parseWhat(name: string, dataType: NimNode, attrs: Table[string, int], types: seq[string], node: NimNode, condNode: NimNode, thenNode: NimNode): NimNode =
   var vars: OrderedTable[string, VarInfo]
@@ -137,9 +109,9 @@ proc parseWhat(name: string, dataType: NimNode, attrs: Table[string, int], types
           vars[s] = (condNum, typeNum)
 
   expectKind(node, nnkStmtList)
-  var conds: Table[int, NimNode]
+  var condBody: NimNode
   if condNode != nil:
-    conds = parseCond(vars, condNode)
+    condBody = parseCond(condNode)
 
   let tupleType = newNimNode(nnkTupleTy)
   for (varName, varInfo) in vars.pairs:
@@ -151,12 +123,30 @@ proc parseWhat(name: string, dataType: NimNode, attrs: Table[string, int], types
     callback = genSym(nskLet, "callback")
     v2 = genSym(nskParam, "v")
     query = genSym(nskLet, "query")
+    v3 = genSym(nskParam, "v")
+    filter = genSym(nskLet, "filter")
     session = ident("session")
 
   var queryBody = newNimNode(nnkTupleConstr)
   for (varName, varInfo) in vars.pairs:
     let typeField = ident(typePrefix & $varInfo.typeNum)
     queryBody.add(newNimNode(nnkExprColonExpr).add(ident(varName)).add(quote do: `v2`[`varName`].`typeField`))
+
+  let queryLet = quote do:
+    let `query` = proc (`v2`: Table[string, `dataType`]): `tupleType` =
+      `queryBody`
+
+  let filterLet =
+    if condBody != nil:
+      let usedVars = getUsedVars(vars, condNode)
+      let varNode = createVars(usedVars, v3)
+      quote do:
+        let `filter` = proc (`v3`: Table[string, `dataType`]): bool =
+          `varNode`
+          `condBody`
+    else:
+      quote do:
+        let `filter`: proc (`v3`: Table[string, `dataType`]): bool = nil
 
   if thenNode != nil:
     let usedVars = getUsedVars(vars, thenNode)
@@ -166,20 +156,20 @@ proc parseWhat(name: string, dataType: NimNode, attrs: Table[string, int], types
         `session`.insideRule = true
         `varNode`
         `thenNode`
-      let `query` = proc (`v2`: Table[string, `dataType`]): `tupleType` =
-        `queryBody`
-      var `prod` = initProduction[`dataType`, `tupleType`](`name`, `callback`, `query`)
+      `queryLet`
+      `filterLet`
+      var `prod` = initProduction[`dataType`, `tupleType`](`name`, `callback`, `query`, `filter`)
     )
   else:
     result = newStmtList(quote do:
-      let `query` = proc (`v2`: Table[string, `dataType`]): `tupleType` =
-        `queryBody`
-      var `prod` = initProduction[`dataType`, `tupleType`](`name`, nil, `query`)
+      `queryLet`
+      `filterLet`
+      var `prod` = initProduction[`dataType`, `tupleType`](`name`, nil, `query`, `filter`)
     )
 
   for condNum in 0 ..< node.len:
     let child = node[condNum]
-    result.add addCond(datatype, vars, prod, child, if conds.hasKey(condNum): conds[condNum] else: nil)
+    result.add addCond(datatype, vars, prod, child)
   result.add prod
 
 macro ruleWithAttrs*(sig: untyped, attrsNode: typed, typesNode: typed, body: untyped): untyped =
