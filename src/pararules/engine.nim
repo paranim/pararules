@@ -1,4 +1,4 @@
-import strformat, tables, algorithm, sets
+import strformat, tables, algorithm, sets, sequtils
 
 type
   # facts
@@ -331,12 +331,9 @@ proc removeIdAttr[T](session: var Session[T], id: T, attr: T) =
   let attr = attr.type1.ord
   let idAttr = (id, attr)
   if session.idAttrNodes.hasKey(idAttr):
-    # copy the set into a seq since rightActivation will be modifying the set
-    var idAttrNodes: seq[ptr AlphaNode[T]]
-    for node in session.idAttrNodes[idAttr].items:
-      idAttrNodes.add(node)
-    # right activate each node
-    for node in idAttrNodes:
+    # we use toSeq here to make a copy of idAttrNodes[idAttr], since
+    # rightActivation will modify it
+    for node in session.idAttrNodes[idAttr].items.toSeq:
       let oldFact = node.facts[id][attr]
       session.rightActivation(node[], Token[T](fact: oldFact, kind: Remove))
 
@@ -386,13 +383,17 @@ proc upsertFact[T](session: var Session[T], fact: Fact[T], nodes: HashSet[ptr Al
       session.rightActivation(n[], Token[T](fact: fact, kind: Insert))
   else:
     let existingNodes = session.idAttrNodes[idAttr]
+    # update or insert facts, depending on whether the node already exists
     for n in nodes.items:
       if existingNodes.contains(n):
         let oldFact = n.facts[fact.id.type0][fact.attr.type1.ord]
         session.rightActivation(n[], Token[T](fact: fact, kind: Update, oldFact: oldFact))
       else:
         session.rightActivation(n[], Token[T](fact: fact, kind: Insert))
-    for n in existingNodes.items:
+    # remove any facts from nodes that the new fact wasn't inserted in
+    # we use toSeq here to make a copy of the existingNodes, because
+    # rightActivation will modify it
+    for n in existingNodes.items.toSeq:
       if not nodes.contains(n):
         let oldFact = n.facts[fact.id.type0][fact.attr.type1.ord]
         session.rightActivation(n[], Token[T](fact: oldFact, kind: Remove))
