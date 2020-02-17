@@ -313,7 +313,7 @@ proc rightActivation[T](session: var Session[T], node: var AlphaNode[T], token: 
       node.facts[id] = initTable[int, Fact[T]]()
     node.facts[id][attr] = token.fact
     if not session.idAttrNodes.hasKey(idAttr):
-      session.idAttrNodes[idAttr] = initHashSet[ptr AlphaNode[T]]()
+      session.idAttrNodes[idAttr] = initHashSet[ptr AlphaNode[T]](initialSize = 4)
     let exists = session.idAttrNodes[idAttr].containsOrIncl(node.addr)
     assert not exists
   of Remove:
@@ -377,29 +377,30 @@ proc getAlphaNodesForFact[T](session: var Session[T], node: var AlphaNode[T], fa
     for child in node.children.mitems:
       session.getAlphaNodesForFact(child, fact, false, nodes)
 
-proc updateFact[T](session: var Session[T], fact: Fact[T], nodes: HashSet[ptr AlphaNode[T]]): bool =
+proc upsertFact[T](session: var Session[T], fact: Fact[T], nodes: HashSet[ptr AlphaNode[T]]) =
   let id = fact.id.type0
   let attr = fact.attr.type1.ord
   let idAttr = (id, attr)
   if not session.idAttrNodes.hasKey(idAttr):
-    return false
-  let oldNodes = session.idAttrNodes[idAttr]
-  if oldNodes.len == 0:
-    return false
-  if oldNodes != nodes:
-    return false
-  for n in nodes.items:
-    let oldFact = n.facts[fact.id.type0][fact.attr.type1.ord]
-    session.rightActivation(n[], Token[T](fact: fact, kind: Update, oldFact: oldFact))
-  true
-
-proc insertFact*[T](session: var Session[T], fact: Fact[T]) =
-  var nodes = initHashSet[ptr AlphaNode[T]]()
-  getAlphaNodesForFact(session, session.alphaNode, fact, true, nodes)
-  if not session.updateFact(fact, nodes):
-    removeIdAttr(session, fact.id, fact.attr)
     for n in nodes.items:
       session.rightActivation(n[], Token[T](fact: fact, kind: Insert))
+  else:
+    let existingNodes = session.idAttrNodes[idAttr]
+    for n in nodes.items:
+      if existingNodes.contains(n):
+        let oldFact = n.facts[fact.id.type0][fact.attr.type1.ord]
+        session.rightActivation(n[], Token[T](fact: fact, kind: Update, oldFact: oldFact))
+      else:
+        session.rightActivation(n[], Token[T](fact: fact, kind: Insert))
+    for n in existingNodes.items:
+      if not nodes.contains(n):
+        let oldFact = n.facts[fact.id.type0][fact.attr.type1.ord]
+        session.rightActivation(n[], Token[T](fact: oldFact, kind: Remove))
+
+proc insertFact*[T](session: var Session[T], fact: Fact[T]) =
+  var nodes = initHashSet[ptr AlphaNode[T]](initialSize = 4)
+  getAlphaNodesForFact(session, session.alphaNode, fact, true, nodes)
+  session.upsertFact(fact, nodes)
   if not session.insideRule:
     session.triggerThenBlocks()
 
