@@ -5,7 +5,11 @@ type
   Field* = enum
     Identifier, Attribute, Value
   Fact[T] = tuple[id: T, attr: T, value: T]
-  Token[T] = tuple[fact: Fact[T], insert: bool]
+  TokenKind = enum
+    Insert, Remove
+  Token[T] = object
+    fact: Fact[T]
+    kind: TokenKind
   IdAttr = tuple[id: int, attr: int]
 
   # vars
@@ -189,14 +193,14 @@ proc leftActivation[T](session: var Session[T], node: JoinNode[T], vars: Vars[T]
     let id = vars[node.idName].type0
     if node.alphaNode.facts.hasKey(id):
       for alphaFact in node.alphaNode.facts[id].values:
-        if performJoinTests(node, vars, alphaFact, token.insert):
+        if performJoinTests(node, vars, alphaFact, token.kind == Insert):
           var newToken = token
           newToken.fact = alphaFact
           session.leftActivation(node.child, vars, debugFacts, newToken)
   else:
     for factsForId in node.alphaNode.facts.values:
       for alphaFact in factsForId.values:
-        if performJoinTests(node, vars, alphaFact, token.insert):
+        if performJoinTests(node, vars, alphaFact, token.kind == Insert):
           var newToken = token
           newToken.fact = alphaFact
           session.leftActivation(node.child, vars, debugFacts, newToken)
@@ -209,7 +213,8 @@ proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: V
   when not defined(release):
     debugFacts[].add(token.fact)
 
-  if token.insert:
+  case token.kind:
+  of Insert:
     node.vars.add(newVars)
     when not defined(release):
       node.debugFacts.add(debugFacts[])
@@ -217,7 +222,7 @@ proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: V
       node.thenQueue.add(node.trigger)
       if node.trigger:
         session.thenNodes[].incl(node.addr)
-  else:
+  of Remove:
     let index = node.vars.find(newVars)
     if index >= 0:
       node.vars.delete(index)
@@ -230,7 +235,7 @@ proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: V
     session.leftActivation(node.child, newVars, debugFacts, token)
 
 proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token[T]) =
-  if token.insert and node.condition.shouldTrigger:
+  if token.kind == Insert and node.condition.shouldTrigger:
     node.prodNode.trigger = true
   when not defined(release):
     proc newRefSeq[T](s: seq[T]): ref seq[T] =
@@ -238,7 +243,7 @@ proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token
       result[] = s
   if node.parent.nodeType == Root:
     let vars = Vars[T]()
-    if performJoinTests(node, vars, token.fact, token.insert):
+    if performJoinTests(node, vars, token.fact, token.kind == Insert):
       let debugFacts: ref seq[Fact[T]] =
         when not defined(release):
           newRefSeq(newSeq[Fact[T]]())
@@ -251,7 +256,7 @@ proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token
       # SHORTCUT: if we know the id, compare it with the token right away
       if node.idName != "" and vars[node.idName].type0 != token.fact.id.type0:
         continue
-      if performJoinTests(node, vars, token.fact, token.insert):
+      if performJoinTests(node, vars, token.fact, token.kind == Insert):
         let debugFacts: ref seq[Fact[T]] =
           when not defined(release):
             newRefSeq(node.parent.debugFacts[i])
@@ -263,7 +268,8 @@ proc rightActivation[T](session: var Session[T], node: var AlphaNode[T], token: 
   let id = token.fact.id.type0
   let attr = token.fact.attr.type1.ord
   let idAttr = (id, attr)
-  if token.insert:
+  case token.kind:
+  of Insert:
     if not node.facts.hasKey(id):
       node.facts[id] = initTable[int, Fact[T]]()
     node.facts[id][attr] = token.fact
@@ -271,25 +277,12 @@ proc rightActivation[T](session: var Session[T], node: var AlphaNode[T], token: 
       session.idAttrNodes[idAttr] = initHashSet[ptr AlphaNode[T]]()
     let exists = session.idAttrNodes[idAttr].containsOrIncl(node.addr)
     assert not exists
-  else:
+  of Remove:
     node.facts[id].del(attr)
     let missing = session.idAttrNodes[idAttr].missingOrExcl(node.addr)
     assert not missing
   for child in node.successors:
     session.rightActivation(child, token)
-
-proc insertFact[T](session: var Session[T], node: var AlphaNode[T], fact: Fact[T], root: bool) =
-  if not root:
-    let val = case node.testField:
-      of Field.Identifier: fact[0]
-      of Field.Attribute: fact[1]
-      of Field.Value: fact[2]
-    if val != node.testValue:
-      return
-  for child in node.children.mitems:
-    session.insertFact(child, fact, false)
-  if not root:
-    session.rightActivation(node, (fact: fact, insert: true))
 
 proc removeIdAttr[T](session: var Session[T], id: T, attr: T) =
   let id = id.type0
@@ -303,7 +296,7 @@ proc removeIdAttr[T](session: var Session[T], id: T, attr: T) =
     # right activate each node
     for node in idAttrNodes:
       let oldFact = node.facts[id][attr]
-      session.rightActivation(node[], (fact: oldFact, insert: false))
+      session.rightActivation(node[], Token[T](fact: oldFact, kind: Remove))
 
 proc triggerThenBlocks[T](session: var Session[T]) =
   # find all nodes with `then` blocks that need executed
@@ -327,9 +320,58 @@ proc triggerThenBlocks[T](session: var Session[T]) =
   # recur because there may be new `then` blocks to execute
   session.triggerThenBlocks()
 
+proc getAlphaNodesForFact[T](session: var Session[T], node: var AlphaNode[T], fact: Fact[T], root: bool, nodes: var HashSet[ptr AlphaNode[T]]) =
+  if root:
+    for child in node.children.mitems:
+      session.getAlphaNodesForFact(child, fact, false, nodes)
+  else:
+    let val = case node.testField:
+      of Field.Identifier: fact[0]
+      of Field.Attribute: fact[1]
+      of Field.Value: fact[2]
+    if val != node.testValue:
+      return
+    nodes.incl(node.addr)
+    for child in node.children.mitems:
+      session.getAlphaNodesForFact(child, fact, false, nodes)
+
+proc updateFact[T](session: var Session[T], fact: Fact[T], nodes: HashSet[ptr AlphaNode[T]]): bool =
+  let id = fact.id.type0
+  let attr = fact.attr.type1.ord
+  let idAttr = (id, attr)
+  if not session.idAttrNodes.hasKey(idAttr):
+    return false
+  let oldNodes = session.idAttrNodes[idAttr]
+  if oldNodes.len == 0:
+    return false
+  if oldNodes != nodes:
+    return false
+  for n in nodes.items:
+    let oldFact = n.facts[fact.id.type0][fact.attr.type1.ord]
+    session.rightActivation(n[], Token[T](fact: oldFact, kind: Remove))
+    session.rightActivation(n[], Token[T](fact: fact, kind: Insert))
+  true
+
+proc insertFact[T](session: var Session[T], node: var AlphaNode[T], fact: Fact[T], root: bool) =
+  if not root:
+    let val = case node.testField:
+      of Field.Identifier: fact[0]
+      of Field.Attribute: fact[1]
+      of Field.Value: fact[2]
+    if val != node.testValue:
+      return
+  for child in node.children.mitems:
+    session.insertFact(child, fact, false)
+  if not root:
+    session.rightActivation(node, Token[T](fact: fact, kind: Insert))
+
 proc insertFact*[T](session: var Session[T], fact: Fact[T]) =
+  #var nodes = initHashSet[ptr AlphaNode[T]]()
+  #getAlphaNodesForFact(session, session.alphaNode, fact, true, nodes)
   session.removeIdAttr(fact.id, fact.attr)
   session.insertFact(session.alphaNode, fact, true)
+  #for n in nodes.items:
+  #  session.rightActivation(n[], Token[T](fact: fact, kind: Insert))
   if not session.insideRule:
     session.triggerThenBlocks()
 
