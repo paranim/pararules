@@ -96,8 +96,8 @@ test "duplicate facts":
     rule duplicateFacts(Fact):
       what:
         (x, Self, y)
-        (x, Color, "red")
-        (y, Color, "red")
+        (x, Color, c)
+        (y, Color, c)
 
   let prodNode = session.prodNodes["duplicateFacts"]
 
@@ -106,6 +106,14 @@ test "duplicate facts":
 
   check prodNode.debugFacts.len == 1
   check prodNode.debugFacts[0].len == 3
+  check prodNode.vars[0]["c"] == initFact("red")
+
+  # update *both* duplicate facts from red to green
+  session.insert(Bob, Color, "green")
+
+  check prodNode.debugFacts.len == 1
+  check prodNode.debugFacts[0].len == 3
+  check prodNode.vars[0]["c"] == initFact("green")
 
 test "removing facts":
   var session = initSession(Fact)
