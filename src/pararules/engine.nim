@@ -178,15 +178,14 @@ proc getVarsFromFact[T](vars: var Vars[T], condition: Condition[T], fact: Fact[T
           vars[v.name] = fact[2]
   true
 
-proc performJoinTests(node: JoinNode, vars: Vars, alphaFact: Fact, insert: bool): bool =
-  var newVars = vars
-  if not newVars.getVarsFromFact(node.condition, alphaFact):
+proc performJoinTests(node: JoinNode, vars: var Vars, alphaFact: Fact, insert: bool): bool =
+  if not vars.getVarsFromFact(node.condition, alphaFact):
     return false
   # only check the filter on insertion, so we can
   # be sure that old facts are removed successfully,
   # even if they technically don't satisfy the condition anymore
   if insert and node.condition.filter != nil:
-    if not node.condition.filter(newVars):
+    if not node.condition.filter(vars):
       return false
   true
 
@@ -198,31 +197,28 @@ proc leftActivation[T](session: var Session[T], node: JoinNode[T], vars: Vars[T]
     let id = vars[node.idName].type0
     if node.alphaNode.facts.hasKey(id):
       for alphaFact in node.alphaNode.facts[id].values:
-        if performJoinTests(node, vars, alphaFact, token.kind == Insert):
+        var newVars = vars
+        if performJoinTests(node, newVars, alphaFact, token.kind == Insert):
           var newToken = token
           newToken.fact = alphaFact
-          session.leftActivation(node.child, vars, debugFacts, newToken)
+          session.leftActivation(node.child, newVars, debugFacts, newToken)
   else:
     for factsForId in node.alphaNode.facts.values:
       for alphaFact in factsForId.values:
-        if performJoinTests(node, vars, alphaFact, token.kind == Insert):
+        var newVars = vars
+        if performJoinTests(node, newVars, alphaFact, token.kind == Insert):
           var newToken = token
           newToken.fact = alphaFact
-          session.leftActivation(node.child, vars, debugFacts, newToken)
+          session.leftActivation(node.child, newVars, debugFacts, newToken)
 
 proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: Vars[T], debugFacts: ref seq[Fact[T]], token: Token[T]) =
-  var newVars = vars
-  let success = newVars.getVarsFromFact(node.condition, token.fact)
-  if not success: # TODO: figure out why this is necessary
-    return
-
   let id = token.fact.id.type0
   let attr = token.fact.attr.type1.ord
   let idAttr = (id, attr)
 
   case token.kind:
   of Insert:
-    node.vars.add(newVars)
+    node.vars.add(vars)
     when not defined(release):
       debugFacts[].add(token.fact)
       node.debugFacts.add(debugFacts[])
@@ -244,12 +240,19 @@ proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: V
   of Update:
     let index = node.idAttrs.find(idAttr)
     if index >= 0:
-      if node.condition.filter != nil and not node.condition.filter(newVars):
+      # if the filter returns false, yet we found the id + attr combo
+      # (hence why index >= 0), it means that the filter must have
+      # previously returned true when the old fact was originally
+      # inserted. in this situation, we want to remove the old fact.
+      # it needs to be "cleaned up" rather than replaced
+      if node.condition.filter != nil and not node.condition.filter(vars):
         let removeToken = Token[T](fact: token.oldFact, kind: Remove)
         session.leftActivation(node, vars, debugFacts, removeToken)
         return
+      # if we found the id + attr combo and there is no filter returning
+      # false, we update the old fact with the new one
       else:
-        node.vars[index] = newVars
+        node.vars[index] = vars
         when not defined(release):
           debugFacts[].add(token.fact)
           node.debugFacts[index] = debugFacts[]
@@ -257,14 +260,17 @@ proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: V
           node.thenQueue[index] = node.trigger
           if node.trigger:
             session.thenNodes[].incl(node.addr)
-    else:
-      if node.condition.filter != nil and node.condition.filter(newVars):
-        let insertToken = Token[T](fact: token.fact, kind: Insert)
-        session.leftActivation(node, vars, debugFacts, insertToken)
-        return
+    # if we didn't find anything to update, but the filter returns true,
+    # it means that the filter must have previously returned false when
+    # the old fact was originally inserted. in this situation, we want
+    # to insert the new fact, since there is no existing slot to do an update
+    elif node.condition.filter != nil and node.condition.filter(vars):
+      let insertToken = Token[T](fact: token.fact, kind: Insert)
+      session.leftActivation(node, vars, debugFacts, insertToken)
+      return
 
   if node.nodeType != Prod:
-    session.leftActivation(node.child, newVars, debugFacts, token)
+    session.leftActivation(node.child, vars, debugFacts, token)
 
 proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token[T]) =
   if (token.kind == Insert or token.kind == Update) and node.condition.shouldTrigger:
@@ -274,7 +280,7 @@ proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token
       new(result)
       result[] = s
   if node.parent.nodeType == Root:
-    let vars = Vars[T]()
+    var vars = Vars[T]()
     if performJoinTests(node, vars, token.fact, token.kind == Insert):
       let debugFacts: ref seq[Fact[T]] =
         when not defined(release):
@@ -288,13 +294,14 @@ proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token
       # SHORTCUT: if we know the id, compare it with the token right away
       if node.idName != "" and vars[node.idName].type0 != token.fact.id.type0:
         continue
-      if performJoinTests(node, vars, token.fact, token.kind == Insert):
+      var newVars = vars # making a mutable copy here is far faster than making `vars` mutable above
+      if performJoinTests(node, newVars, token.fact, token.kind == Insert):
         let debugFacts: ref seq[Fact[T]] =
           when not defined(release):
             newRefSeq(node.parent.debugFacts[i])
           else:
             nil
-        session.leftActivation(node.child, vars, debugFacts, token)
+        session.leftActivation(node.child, newVars, debugFacts, token)
 
 proc rightActivation[T](session: var Session[T], node: var AlphaNode[T], token: Token[T]) =
   let id = token.fact.id.type0
