@@ -42,7 +42,7 @@ type
   MemoryNode[T] = ref object
     parent: JoinNode[T]
     child: JoinNode[T]
-    vars*: seq[Vars[T]]
+    vars: seq[Vars[T]]
     idAttrs: seq[IdAttr]
     condition: Condition[T]
     case nodeType: MemoryNodeType

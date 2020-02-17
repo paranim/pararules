@@ -92,12 +92,13 @@ test "adding facts out of order":
 
 test "duplicate facts":
   var session = initSession(Fact)
-  session.add:
+  let rule1 =
     rule duplicateFacts(Fact):
       what:
         (x, Self, y)
         (x, Color, c)
         (y, Color, c)
+  session.add(rule1)
 
   let prodNode = session.prodNodes["duplicateFacts"]
 
@@ -106,14 +107,14 @@ test "duplicate facts":
 
   check prodNode.debugFacts.len == 1
   check prodNode.debugFacts[0].len == 3
-  check prodNode.vars[0]["c"] == initFact("red")
+  check session.query(rule1).c == "red"
 
   # update *both* duplicate facts from red to green
   session.insert(Bob, Color, "green")
 
   check prodNode.debugFacts.len == 1
   check prodNode.debugFacts[0].len == 3
-  check prodNode.vars[0]["c"] == initFact("green")
+  check session.query(rule1).c == "green"
 
 test "removing facts":
   var session = initSession(Fact)
