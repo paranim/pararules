@@ -134,12 +134,12 @@ test "removing facts":
   session.insert(Yair, RightOf, Bob)
   check prodNode.debugFacts.len == 1
 
-  session.remove(Yair, RightOf, Bob)
+  session.retract(Yair, RightOf, Bob)
   check prodNode.debugFacts.len == 0
   check prodNode.getParent.debugFacts.len == 1
   check prodNode.getParent.debugFacts[0].len == 3
 
-  session.remove(Bob, Color, "blue")
+  session.retract(Bob, Color, "blue")
   check prodNode.debugFacts.len == 0
   check prodNode.getParent.debugFacts.len == 0
 
@@ -467,7 +467,7 @@ test "conditions can use external values":
 
   # now we prevent the rule from firing again,
   # but the old "Alice, LeftOf, Bob" fact
-  # is still removed successfully
+  # is still retractd successfully
 
   allowRuleToFire = false
   session.insert(Alice, LeftOf, Zach)
@@ -497,7 +497,7 @@ test "id + attr combos can be stored in multiple alpha nodes":
   check alice.color == "blue"
   check alice.height == 60
 
-  session.remove(Alice, Color, "blue")
+  session.retract(Alice, Color, "blue")
 
   let index = session.find(rules.getAlice)
   check index == -1

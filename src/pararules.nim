@@ -419,7 +419,7 @@ proc createUpdateProc(dataType: NimNode, intType: NimNode, attrType: NimNode, id
       if procName == "insert":
         bindSym("insertFact")
       else:
-        bindSym("removeFact")
+        bindSym("retractFact")
     checkProcId = ident(checkPrefix & dataType.strVal)
     initProc = ident(initPrefix & dataType.strVal)
     session = ident("session")
@@ -515,7 +515,7 @@ use `Strings` in the schema.
     createInitProcs(dataType, enumName, types),
     createCheckProc(dataType, types, attrs),
     createUpdateProcs(dataType, types, "insert"),
-    createUpdateProcs(dataType, types, "remove"),
+    createUpdateProcs(dataType, types, "retract"),
     createConstants(dataType, types, attrs)
   )
 

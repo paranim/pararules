@@ -6,11 +6,11 @@ type
     Identifier, Attribute, Value
   Fact[T] = tuple[id: T, attr: T, value: T]
   TokenKind = enum
-    Insert, Remove, Update
+    Insert, Retract, Update
   Token[T] = object
     fact: Fact[T]
     case kind: TokenKind
-    of Insert, Remove:
+    of Insert, Retract:
       nil
     of Update:
       oldFact: Fact[T]
@@ -227,7 +227,7 @@ proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: V
       if trigger:
         session.thenNodes[].incl(node.addr)
     node.idAttrs.add(idAttr)
-  of Remove:
+  of Retract:
     let index = node.idAttrs.find(idAttr)
     node.vars.delete(index)
     node.enabledVars.delete(index)
@@ -298,7 +298,7 @@ proc rightActivation[T](session: var Session[T], node: var AlphaNode[T], token: 
       session.idAttrNodes[idAttr] = initHashSet[ptr AlphaNode[T]](initialSize = 4)
     let exists = session.idAttrNodes[idAttr].containsOrIncl(node.addr)
     assert not exists
-  of Remove:
+  of Retract:
     node.facts[id].del(attr)
     let missing = session.idAttrNodes[idAttr].missingOrExcl(node.addr)
     assert not missing
@@ -308,7 +308,7 @@ proc rightActivation[T](session: var Session[T], node: var AlphaNode[T], token: 
   for child in node.successors:
     session.rightActivation(child, token)
 
-proc removeIdAttr[T](session: var Session[T], id: T, attr: T) =
+proc retractIdAttr[T](session: var Session[T], id: T, attr: T) =
   let id = id.type0
   let attr = attr.type1.ord
   let idAttr = (id, attr)
@@ -317,7 +317,7 @@ proc removeIdAttr[T](session: var Session[T], id: T, attr: T) =
     # rightActivation will modify it
     for node in session.idAttrNodes[idAttr].items.toSeq:
       let oldFact = node.facts[id][attr]
-      session.rightActivation(node[], Token[T](fact: oldFact, kind: Remove))
+      session.rightActivation(node[], Token[T](fact: oldFact, kind: Retract))
 
 proc triggerThenBlocks[T](session: var Session[T]) =
   # find all nodes with `then` blocks that need executed
@@ -365,13 +365,13 @@ proc upsertFact[T](session: var Session[T], fact: Fact[T], nodes: HashSet[ptr Al
       session.rightActivation(n[], Token[T](fact: fact, kind: Insert))
   else:
     let existingNodes = session.idAttrNodes[idAttr]
-    # remove any facts from nodes that the new fact wasn't inserted in
+    # retract any facts from nodes that the new fact wasn't inserted in
     # we use toSeq here to make a copy of the existingNodes, because
     # rightActivation will modify it
     for n in existingNodes.items.toSeq:
       if not nodes.contains(n):
         let oldFact = n.facts[fact.id.type0][fact.attr.type1.ord]
-        session.rightActivation(n[], Token[T](fact: oldFact, kind: Remove))
+        session.rightActivation(n[], Token[T](fact: oldFact, kind: Retract))
     # update or insert facts, depending on whether the node already exists
     for n in nodes.items:
       if existingNodes.contains(n):
@@ -387,8 +387,8 @@ proc insertFact*[T](session: var Session[T], fact: Fact[T]) =
   if not session.insideRule:
     session.triggerThenBlocks()
 
-proc removeFact*[T](session: var Session[T], fact: Fact[T]) =
-  session.removeIdAttr(fact.id, fact.attr)
+proc retractFact*[T](session: var Session[T], fact: Fact[T]) =
+  session.retractIdAttr(fact.id, fact.attr)
 
 proc initSession*[T](): Session[T] =
   result.alphaNode = new(AlphaNode[T])
