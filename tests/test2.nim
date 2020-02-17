@@ -1,6 +1,8 @@
 import unittest
 import pararules
-import sets
+import sets, random
+
+randomize()
 
 # these tests are for the readme
 
@@ -211,15 +213,13 @@ test "complex types":
 
   check session.query(rules.getPlayer).x == 1.0
 
-test "tips":
-  const playerId = Player
-
+test "joins and advanced queries":
   let rules =
     ruleset:
       rule getPlayer(Fact):
         what:
-          (`playerId`, X, x)
-          (`playerId`, Y, y)
+          (Player, X, x)
+          (Player, Y, y)
       rule getCharacter(Fact):
         what:
           (id, X, x)
@@ -261,3 +261,44 @@ test "tips":
 
   let indexes = session.findAll(rules.getCharacter)
   check indexes.len == 1
+
+test "generating ids":
+  let rule1 =
+    rule getCharacter(Fact):
+      what:
+        (id, X, x)
+        (id, Y, y)
+      cond:
+        id != Player.ord
+
+  var session = initSession(Fact)
+  session.add(rule1)
+
+  session.insert(Player, X, rand(50.0))
+  session.insert(Player, Y, rand(50.0))
+
+  var nextId = Id.high.ord + 1
+
+  for _ in 0 ..< 5:
+    session.insert(nextId, X, rand(50.0))
+    session.insert(nextId, Y, rand(50.0))
+    nextId += 1
+
+  check session.findAll(rule1).len == 5
+
+test "tips":
+  const playerId = Player # just to make sure this works
+
+  let rule1 =
+    rule getPlayer(Fact):
+      what:
+        (`playerId`, X, x)
+        (`playerId`, Y, y)
+
+  var session = initSession(Fact)
+  session.add(rule1)
+
+  session.insert(Player, X, 0f)
+  session.insert(Player, Y, 0f)
+
+  check session.findAll(rule1).len == 1

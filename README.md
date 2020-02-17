@@ -2,6 +2,8 @@ Pararules is the first RETE-based rules engine made for games. It may also be th
 
 Rules engines have been around since the 70s, and the RETE algorithm has been used for almost that long. For some reason, they haven't found their way into games yet. With pararules, you can store the entire state of your game and express the logic as a simple series of rules.
 
+**Pararules is very new and is not fast or stable enough for serious games.**
+
 ## Start with the data
 
 Your data is stored as `(id, attribute, value)` tuples. For example, the player's X position might be `(Player, X, 100.0)`. The delta time (which is the number of seconds since the last frame) might be `(Global, DeltaTime, 0.0168121)`.
@@ -239,22 +241,6 @@ rule stopPlayer(Fact):
 
 It is better to do it that way than to write `x >= float(windowWidth) and windowWidth > 0` on one line, because it gives pararules the opportunity to run each condition at the optimal time. If you need the conditions to work with an `or`, though, you will need to put them together in that way.
 
-If you're trying to debug a `cond` block, keep in mind that you can put whatever arbitrary code you want in there. For example, you can make it print out the values by creating a new scope with `block`, as long as the condition itself is the last thing in that scope:
-
-```nim
-rule stopPlayer(Fact):
-  what:
-    (Global, WindowWidth, windowWidth)
-    (Player, X, x)
-  cond:
-    block:
-      echo x, " ", windowWidth # this is one way you can debug the condition
-      x >= float(windowWidth)
-    windowWidth > 0
-  then:
-    session.insert(Player, X, 0.0)
-```
-
 ## Complex types
 
 Pararules is not limited to storing scalar types like `float` and `int` — you can use any type you want. For example, to store the currently-pressed keys, you can import the `sets` module and use a `HashSet[int]` to store them. However, you need to use a type alias when specifying it in the schema:
@@ -327,7 +313,7 @@ rule movePlayer(Fact):
 
 Notice that we aren't even using `DeltaTime` anymore, but we're keeping it in the `what` block so the rule continues to fire every frame. If all tuples in the `what` block have `then = false`, it will never fire. This way, it will move the player exactly one pixel each frame that an arrow key is pressed. Not exactly the best way to do character movement, but you get the idea.
 
-## Tips
+## Joins and advanced queries
 
 Instead of the `getPlayer` rule, we could make a more generic "getter" rule that works for any id:
 
@@ -363,6 +349,58 @@ let indexes = session.findAll(rules.getCharacter)
 for i in indexes:
   let ch = session.get(rules.getCharacter, i)
   echo ch.id, " ", ch.x, " ", ch.y
+```
+
+## Generating ids
+
+In addition to known ids like `Player`, it is likely that you'll want to generate ids at runtime. For example, if you just want to spawn random enemies, you probably don't want to create a special id in the enum for each one. For this reason, `insert` allows you to just pass arbitrary integers as ids:
+
+```nim
+var nextId = Id.high.ord + 1
+
+for _ in 0 ..< 5:
+  session.insert(nextId, X, rand(50.0))
+  session.insert(nextId, Y, rand(50.0))
+  nextId += 1
+```
+
+By starting the ids at `Id.high.ord + 1`, we begin using the first integer after `Player`. This is important, because if you use anything lower, it'll overlap with one of the known ids:
+
+```nim
+# these modify the same id
+session.insert(1, X, rand(50.0))
+session.insert(Player, X, rand(50.0))
+```
+
+This is also why the following is a compile error:
+
+```nim
+rule getCharacter(Fact):
+  what:
+    (id, X, x)
+    (id, Y, y)
+  cond:
+    id != Player # type mismatch: got <int, Id>
+```
+
+You need to write `id != Player.ord` instead, because pararules transforms all ids to normal integers and gives them back that way.
+
+## Tips
+
+If you're trying to debug a `cond` block, keep in mind that you can put whatever arbitrary code you want in there. For example, you can make it print out the values by creating a new scope with `block`, as long as the condition itself is the last thing in that scope:
+
+```nim
+rule stopPlayer(Fact):
+  what:
+    (Global, WindowWidth, windowWidth)
+    (Player, X, x)
+  cond:
+    block:
+      echo x, " ", windowWidth # this is one way you can debug the condition
+      x >= float(windowWidth)
+    windowWidth > 0
+  then:
+    session.insert(Player, X, 0.0)
 ```
 
 If you want to reference any external values (such as constants) in the `what` block, you need to quote them, because by default any symbol with a lowercase letter will be interpreted as a binding:
