@@ -52,7 +52,7 @@ type
         thenQueue: seq[bool]
       else:
         nil
-    when not defined(release):
+    when defined(test):
       debugFacts*: seq[seq[Fact[T]]]
   JoinNode[T] = ref object
     parent: MemoryNode[T]
@@ -219,7 +219,7 @@ proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: V
   case token.kind:
   of Insert:
     node.vars.add(vars)
-    when not defined(release):
+    when defined(test):
       debugFacts[].add(token.fact)
       node.debugFacts.add(debugFacts[])
     if node.nodeType == Prod and node.callback != nil:
@@ -231,7 +231,7 @@ proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: V
     let index = node.idAttrs.find(idAttr)
     if index >= 0:
       node.vars.delete(index)
-      when not defined(release):
+      when defined(test):
         debugFacts[].add(token.fact)
         node.debugFacts.delete(index)
       if node.nodeType == Prod and node.callback != nil:
@@ -253,7 +253,7 @@ proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: V
       # false, we update the old fact with the new one
       else:
         node.vars[index] = vars
-        when not defined(release):
+        when defined(test):
           debugFacts[].add(token.fact)
           node.debugFacts[index] = debugFacts[]
         if node.nodeType == Prod and node.callback != nil:
@@ -275,7 +275,7 @@ proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: V
 proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token[T]) =
   if (token.kind == Insert or token.kind == Update) and node.condition.shouldTrigger:
     node.prodNode.trigger = true
-  when not defined(release):
+  when defined(test):
     proc newRefSeq[T](s: seq[T]): ref seq[T] =
       new(result)
       result[] = s
@@ -283,7 +283,7 @@ proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token
     var vars = Vars[T]()
     if performJoinTests(node, vars, token.fact, token.kind == Insert):
       let debugFacts: ref seq[Fact[T]] =
-        when not defined(release):
+        when defined(test):
           newRefSeq(newSeq[Fact[T]]())
         else:
           nil
@@ -297,7 +297,7 @@ proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token
       var newVars = vars # making a mutable copy here is far faster than making `vars` mutable above
       if performJoinTests(node, newVars, token.fact, token.kind == Insert):
         let debugFacts: ref seq[Fact[T]] =
-          when not defined(release):
+          when defined(test):
             newRefSeq(node.parent.debugFacts[i])
           else:
             nil
