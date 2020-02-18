@@ -4,6 +4,8 @@ Rules engines have been around since the 70s, and the RETE algorithm has been us
 
 **Pararules is very new and is not fast or stable enough for serious games.**
 
+You can see it in action in the [parakeet](https://github.com/paranim/parakeet) example game and the other [paranim examples](https://github.com/paranim/paranim_examples).
+
 ## Start with the data
 
 Your data is stored as `(id, attribute, value)` tuples. For example, the player's X position might be `(Player, X, 100.0)`. The delta time (which is the number of seconds since the last frame) might be `(Global, DeltaTime, 0.0168121)`.
