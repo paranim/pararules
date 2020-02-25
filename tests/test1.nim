@@ -530,6 +530,33 @@ test "IDs can be arbitrary integers":
   check prodNode.debugFacts.len == 1
   check prodNode.debugFacts[0].len == 5
 
+test "don't use the fast update mechanism if it's part of a join":
+  let rules =
+    ruleset:
+      rule rule1(Fact):
+        what:
+          (Bob, LeftOf, id)
+          (id, Color, color)
+          (id, Height, height)
+
+  var session = initSession(Fact)
+  for r in rules.fields:
+    session.add(r)
+
+  session.insert(Alice, Color, "blue")
+  session.insert(Alice, Height, 60)
+  session.insert(Charlie, Color, "green")
+  session.insert(Charlie, Height, 72)
+
+  session.insert(Bob, LeftOf, Alice)
+  check session.query(rules.rule1).id == Alice
+
+  session.insert(Bob, LeftOf, Charlie)
+  check session.query(rules.rule1).id == Charlie
+
+  let prodNode = session.prodNodes["rule1"]
+  check prodNode.debugFacts.len == 1
+
 # this one is not used...
 # it's just here to make sure we can define
 # multiple schemas in one module

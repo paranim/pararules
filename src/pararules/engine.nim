@@ -63,6 +63,7 @@ type
     condition: Condition[T]
     prodNode: MemoryNode[T]
     idName: string
+    disableFastUpdates: bool
 
   # session
   Condition[T] = object
@@ -133,17 +134,20 @@ proc add*[T, U](session: Session[T], production: Production[T, U]) =
   var memNode = session.betaNode
   var joinNodes: seq[JoinNode[T]]
   let last = production.conditions.len - 1
-  var tests: HashSet[string]
+  var
+    bindings: HashSet[string]
+    joinedBindings: HashSet[string]
   for i in 0 .. last:
     var condition = production.conditions[i]
     var leafNode = session.addNodes(condition.nodes)
     var joinNode = JoinNode[T](parent: memNode, alphaNode: leafNode, condition: condition)
     for v in condition.vars:
-      if tests.contains(v.name):
+      if bindings.contains(v.name):
+        joinedBindings.incl(v.name)
         if v.field == Identifier:
           joinNode.idName = v.name
       else:
-        tests.incl(v.name)
+        bindings.incl(v.name)
     memNode.child = joinNode
     leafNode.successors.add(joinNode)
     # successors must be sorted by ancestry (descendents first) to avoid duplicate rule firings
@@ -163,6 +167,11 @@ proc add*[T, U](session: Session[T], production: Production[T, U]) =
     memNode = newMemNode
   for node in joinNodes:
     node.prodNode = memNode
+    # disable fast updates for facts whose value is part of a join
+    for v in node.condition.vars:
+      if v.field == Value and joinedBindings.contains(v.name):
+        node.disableFastUpdates = true
+        break
 
 proc getVarsFromFact[T](vars: var Vars[T], condition: Condition[T], fact: Fact[T]): bool =
   for v in condition.vars:
@@ -181,7 +190,7 @@ proc getVarsFromFact[T](vars: var Vars[T], condition: Condition[T], fact: Fact[T
           vars[v.name] = fact[2]
   true
 
-proc performJoinTests(node: JoinNode, vars: var Vars, alphaFact: Fact, insert: bool): bool =
+proc performJoinTests(node: JoinNode, vars: var Vars, alphaFact: Fact): bool =
   if not vars.getVarsFromFact(node.condition, alphaFact):
     return false
   true
@@ -195,7 +204,7 @@ proc leftActivation[T](session: var Session[T], node: JoinNode[T], vars: Vars[T]
     if node.alphaNode.facts.hasKey(id):
       for alphaFact in node.alphaNode.facts[id].values:
         var newVars = vars
-        if performJoinTests(node, newVars, alphaFact, token.kind == Insert):
+        if performJoinTests(node, newVars, alphaFact):
           var newToken = token
           newToken.fact = alphaFact
           session.leftActivation(node.child, newVars, debugFacts, newToken)
@@ -203,7 +212,7 @@ proc leftActivation[T](session: var Session[T], node: JoinNode[T], vars: Vars[T]
     for factsForId in node.alphaNode.facts.values:
       for alphaFact in factsForId.values:
         var newVars = vars
-        if performJoinTests(node, newVars, alphaFact, token.kind == Insert):
+        if performJoinTests(node, newVars, alphaFact):
           var newToken = token
           newToken.fact = alphaFact
           session.leftActivation(node.child, newVars, debugFacts, newToken)
@@ -263,7 +272,7 @@ proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token
       result[] = s
   if node.parent.nodeType == Root:
     var vars = Vars[T]()
-    if performJoinTests(node, vars, token.fact, token.kind == Insert):
+    if performJoinTests(node, vars, token.fact):
       let debugFacts: ref seq[Fact[T]] =
         when defined(test):
           newRefSeq(newSeq[Fact[T]]())
@@ -277,7 +286,7 @@ proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token
       if node.idName != "" and vars[node.idName].type0 != token.fact.id.type0:
         continue
       var newVars = vars # making a mutable copy here is far faster than making `vars` mutable above
-      if performJoinTests(node, newVars, token.fact, token.kind == Insert):
+      if performJoinTests(node, newVars, token.fact):
         let debugFacts: ref seq[Fact[T]] =
           when defined(test):
             newRefSeq(node.parent.debugFacts[i])
@@ -306,7 +315,11 @@ proc rightActivation[T](session: var Session[T], node: var AlphaNode[T], token: 
     assert node.facts[id][attr] == token.oldFact
     node.facts[id][attr] = token.fact
   for child in node.successors:
-    session.rightActivation(child, token)
+    if token.kind == Update and child.disableFastUpdates:
+      session.rightActivation(child, Token[T](fact: token.oldFact, kind: Retract))
+      session.rightActivation(child, Token[T](fact: token.fact, kind: Insert))
+    else:
+      session.rightActivation(child, token)
 
 proc triggerThenBlocks[T](session: var Session[T]) =
   # find all nodes with `then` blocks that need executed
