@@ -308,17 +308,6 @@ proc rightActivation[T](session: var Session[T], node: var AlphaNode[T], token: 
   for child in node.successors:
     session.rightActivation(child, token)
 
-proc retractIdAttr[T](session: var Session[T], id: T, attr: T) =
-  let id = id.type0
-  let attr = attr.type1.ord
-  let idAttr = (id, attr)
-  if session.idAttrNodes.hasKey(idAttr):
-    # we use toSeq here to make a copy of idAttrNodes[idAttr], since
-    # rightActivation will modify it
-    for node in session.idAttrNodes[idAttr].items.toSeq:
-      let oldFact = node.facts[id][attr]
-      session.rightActivation(node[], Token[T](fact: oldFact, kind: Retract))
-
 proc triggerThenBlocks[T](session: var Session[T]) =
   # find all nodes with `then` blocks that need executed
   var thenNodes: seq[ptr MemoryNode[T]]
@@ -388,7 +377,14 @@ proc insertFact*[T](session: var Session[T], fact: Fact[T]) =
     session.triggerThenBlocks()
 
 proc retractFact*[T](session: var Session[T], fact: Fact[T]) =
-  session.retractIdAttr(fact.id, fact.attr)
+  let id = fact.id.type0
+  let attr = fact.attr.type1.ord
+  let idAttr = (id, attr)
+  # we use toSeq here to make a copy of idAttrNodes[idAttr], since
+  # rightActivation will modify it
+  for node in session.idAttrNodes[idAttr].items.toSeq:
+    assert fact == node.facts[id][attr]
+    session.rightActivation(node[], Token[T](fact: fact, kind: Retract))
 
 proc initSession*[T](): Session[T] =
   result.alphaNode = new(AlphaNode[T])
