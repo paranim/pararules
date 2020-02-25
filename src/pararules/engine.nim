@@ -241,7 +241,6 @@ proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: V
     node.vars.delete(index)
     node.enabledVars.delete(index)
     when defined(test):
-      debugFacts[].add(token.fact)
       node.debugFacts.delete(index)
     if node.nodeType == Prod and node.callback != nil:
       node.thenQueue.delete(index)
