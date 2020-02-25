@@ -54,7 +54,7 @@ type
         filter: FilterFn[T]
       else:
         nil
-    when defined(test):
+    when defined(pararulesTest):
       debugFacts*: seq[seq[Fact[T]]]
   JoinNode[T] = ref object
     parent: MemoryNode[T]
@@ -227,7 +227,7 @@ proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: V
     node.vars.add(vars)
     let enabled = node.nodeType != Prod or node.filter == nil or node.filter(vars)
     node.enabledVars.add(enabled)
-    when defined(test):
+    when defined(pararulesTest):
       debugFacts[].add(token.fact)
       node.debugFacts.add(debugFacts[])
     if node.nodeType == Prod and node.callback != nil:
@@ -240,7 +240,7 @@ proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: V
     let index = node.idAttrs.find(idAttr)
     node.vars.delete(index)
     node.enabledVars.delete(index)
-    when defined(test):
+    when defined(pararulesTest):
       node.debugFacts.delete(index)
     if node.nodeType == Prod and node.callback != nil:
       node.thenQueue.delete(index)
@@ -250,7 +250,7 @@ proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: V
     node.vars[index] = vars
     let enabled = node.nodeType != Prod or node.filter == nil or node.filter(vars)
     node.enabledVars[index] = enabled
-    when defined(test):
+    when defined(pararulesTest):
       debugFacts[].add(token.fact)
       node.debugFacts[index] = debugFacts[]
     if node.nodeType == Prod and node.callback != nil:
@@ -265,7 +265,7 @@ proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: V
 proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token[T]) =
   if (token.kind == Insert or token.kind == Update) and node.condition.shouldTrigger:
     node.prodNode.trigger = true
-  when defined(test):
+  when defined(pararulesTest):
     proc newRefSeq[T](s: seq[T]): ref seq[T] =
       new(result)
       result[] = s
@@ -273,7 +273,7 @@ proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token
     var vars = Vars[T]()
     if performJoinTests(node, vars, token.fact):
       let debugFacts: ref seq[Fact[T]] =
-        when defined(test):
+        when defined(pararulesTest):
           newRefSeq(newSeq[Fact[T]]())
         else:
           nil
@@ -287,7 +287,7 @@ proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token
       var newVars = vars # making a mutable copy here is far faster than making `vars` mutable above
       if performJoinTests(node, newVars, token.fact):
         let debugFacts: ref seq[Fact[T]] =
-          when defined(test):
+          when defined(pararulesTest):
             newRefSeq(node.parent.debugFacts[i])
           else:
             nil
