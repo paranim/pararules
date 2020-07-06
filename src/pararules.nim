@@ -418,8 +418,10 @@ proc createUpdateProc(dataType: NimNode, intType: NimNode, attrType: NimNode, id
     engineProcId = block:
       if procName == "insert":
         bindSym("insertFact")
-      else:
+      elif procName == "retract":
         bindSym("retractFact")
+      else:
+        raise newException(Exception, "Invalid procName: " & procName)
     checkProcId = ident(checkPrefix & dataType.strVal)
     initProc = ident(initPrefix & dataType.strVal)
     session = ident("session")
@@ -445,10 +447,36 @@ proc createUpdateProc(dataType: NimNode, intType: NimNode, attrType: NimNode, id
     body = newStmtList(body)
   )
 
-proc createUpdateProcs(dataType: NimNode, types: seq[NimNode], procName: string): NimNode =
+proc createRetractProc(dataType: NimNode, intType: NimNode, attrType: NimNode, idType: NimNode): NimNode =
+  let
+    procId = ident("retract")
+    engineProcId = bindSym("retractFact")
+    initProc = ident(initPrefix & dataType.strVal)
+    session = ident("session")
+    sessionType = newNimNode(nnkVarTy).add(newNimNode(nnkBracketExpr).add(bindSym("Session")).add(dataType))
+    id = ident("id")
+    attr = ident("attr")
+    body = quote do:
+      `engineProcId`(`session`, `initProc`(`id`), `initProc`(`attr`))
+
+  newProc(
+    name = postfix(procId, "*"),
+    params = [
+      ident("void"),
+      newIdentDefs(session, sessionType),
+      newIdentDefs(id, infix(idType, "or", intType)),
+      newIdentDefs(attr, attrType),
+    ],
+    body = newStmtList(body)
+  )
+
+proc createUpdateProcs(dataType: NimNode, types: seq[NimNode]): NimNode =
   result = newStmtList()
   for i in 0 ..< types.len:
-    result.add(createUpdateProc(dataType, types[0], types[1], types[2], types[i], i, procName))
+    result.add(createUpdateProc(dataType, types[0], types[1], types[2], types[i], i, "insert"))
+    result.add(createUpdateProc(dataType, types[0], types[1], types[2], types[i], i, "retract"))
+  # create a retract proc that only requires the id and attr
+  result.add(createRetractProc(dataType, types[0], types[1], types[2]))
 
 proc createConstants(dataType: NimNode, types: seq[NimNode], attrs: Table[string, int]): NimNode =
   let attrToTypeId = ident(attrToTypePrefix & dataType.strVal)
@@ -514,8 +542,7 @@ use `Strings` in the schema.
     createEqProc(dataType, types),
     createInitProcs(dataType, enumName, types),
     createCheckProc(dataType, types, attrs),
-    createUpdateProcs(dataType, types, "insert"),
-    createUpdateProcs(dataType, types, "retract"),
+    createUpdateProcs(dataType, types),
     createConstants(dataType, types, attrs)
   )
 

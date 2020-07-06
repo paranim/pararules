@@ -139,7 +139,7 @@ test "removing facts":
   check prodNode.getParent.debugFacts.len == 1
   check prodNode.getParent.debugFacts[0].len == 3
 
-  session.retract(Bob, Color, "blue")
+  session.retract(Bob, Color) # value parameter is not required
   check prodNode.debugFacts.len == 0
   check prodNode.getParent.debugFacts.len == 0
 

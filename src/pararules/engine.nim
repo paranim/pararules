@@ -398,6 +398,16 @@ proc retractFact*[T](session: var Session[T], fact: Fact[T]) =
     assert fact == node.facts[id][attr]
     session.rightActivation(node[], Token[T](fact: fact, kind: Retract))
 
+proc retractFact*[T](session: var Session[T], id: T, attr: T) =
+  let id = id.type0
+  let attr = attr.type1.ord
+  let idAttr = (id, attr)
+  # we use toSeq here to make a copy of idAttrNodes[idAttr], since
+  # rightActivation will modify it
+  for node in session.idAttrNodes[idAttr].items.toSeq:
+    let fact = node.facts[id][attr]
+    session.rightActivation(node[], Token[T](fact: fact, kind: Retract))
+
 proc initSession*[T](): Session[T] =
   result.alphaNode = new(AlphaNode[T])
   result.betaNode = new(MemoryNode[T])
