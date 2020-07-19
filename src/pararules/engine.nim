@@ -190,11 +190,6 @@ proc getVarsFromFact[T](vars: var Vars[T], condition: Condition[T], fact: Fact[T
           vars[v.name] = fact[2]
   true
 
-proc performJoinTests(node: JoinNode, vars: var Vars, alphaFact: Fact): bool =
-  if not vars.getVarsFromFact(node.condition, alphaFact):
-    return false
-  true
-
 proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: Vars[T], debugFacts: ref seq[Fact[T]], token: Token[T])
 
 proc leftActivation[T](session: var Session[T], node: JoinNode[T], vars: Vars[T], debugFacts: ref seq[Fact[T]], token: Token[T]) =
@@ -204,7 +199,7 @@ proc leftActivation[T](session: var Session[T], node: JoinNode[T], vars: Vars[T]
     if node.alphaNode.facts.hasKey(id):
       for alphaFact in node.alphaNode.facts[id].values:
         var newVars = vars
-        if performJoinTests(node, newVars, alphaFact):
+        if getVarsFromFact(newVars, node.condition, alphaFact):
           var newToken = token
           newToken.fact = alphaFact
           session.leftActivation(node.child, newVars, debugFacts, newToken)
@@ -212,7 +207,7 @@ proc leftActivation[T](session: var Session[T], node: JoinNode[T], vars: Vars[T]
     for factsForId in node.alphaNode.facts.values:
       for alphaFact in factsForId.values:
         var newVars = vars
-        if performJoinTests(node, newVars, alphaFact):
+        if getVarsFromFact(newVars, node.condition, alphaFact):
           var newToken = token
           newToken.fact = alphaFact
           session.leftActivation(node.child, newVars, debugFacts, newToken)
@@ -271,7 +266,7 @@ proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token
       result[] = s
   if node.parent == nil: # root node
     var vars = Vars[T]()
-    if performJoinTests(node, vars, token.fact):
+    if getVarsFromFact(vars, node.condition, token.fact):
       let debugFacts: ref seq[Fact[T]] =
         when defined(pararulesTest):
           newRefSeq(newSeq[Fact[T]]())
@@ -285,7 +280,7 @@ proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token
       if node.idName != "" and vars[node.idName].type0 != token.fact.id.type0:
         continue
       var newVars = vars # making a mutable copy here is far faster than making `vars` mutable above
-      if performJoinTests(node, newVars, token.fact):
+      if getVarsFromFact(newVars, node.condition, token.fact):
         let debugFacts: ref seq[Fact[T]] =
           when defined(pararulesTest):
             newRefSeq(node.parent.debugFacts[i])
