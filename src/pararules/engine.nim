@@ -38,7 +38,7 @@ type
 
   # beta network
   MemoryNodeType = enum
-    Root, Partial, Prod
+    Partial, Prod
   MemoryNode[T] = ref object
     parent: JoinNode[T]
     child: JoinNode[T]
@@ -78,7 +78,6 @@ type
     filter: FilterFn[T]
   Session*[T] = object
     alphaNode: AlphaNode[T]
-    betaNode: MemoryNode[T]
     prodNodes*: ref Table[string, MemoryNode[T]]
     idAttrNodes: ref Table[IdAttr, HashSet[ptr AlphaNode[T]]]
     insideRule*: bool
@@ -131,7 +130,7 @@ proc isAncestor(x, y: JoinNode): bool =
   false
 
 proc add*[T, U](session: Session[T], production: Production[T, U]) =
-  var memNode = session.betaNode
+  var memNode: MemoryNode[T] = nil
   var joinNodes: seq[JoinNode[T]]
   let last = production.conditions.len - 1
   var
@@ -148,7 +147,8 @@ proc add*[T, U](session: Session[T], production: Production[T, U]) =
           joinNode.idName = v.name
       else:
         bindings.incl(v.name)
-    memNode.child = joinNode
+    if memNode != nil:
+      memNode.child = joinNode
     leafNode.successors.add(joinNode)
     # successors must be sorted by ancestry (descendents first) to avoid duplicate rule firings
     leafNode.successors.sort(proc (x, y: JoinNode[T]): int =
@@ -269,7 +269,7 @@ proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token
     proc newRefSeq[T](s: seq[T]): ref seq[T] =
       new(result)
       result[] = s
-  if node.parent.nodeType == Root:
+  if node.parent == nil: # root node
     var vars = Vars[T]()
     if performJoinTests(node, vars, token.fact):
       let debugFacts: ref seq[Fact[T]] =
@@ -410,7 +410,6 @@ proc retractFact*[T](session: var Session[T], id: T, attr: T) =
 
 proc initSession*[T](): Session[T] =
   result.alphaNode = new(AlphaNode[T])
-  result.betaNode = new(MemoryNode[T])
   result.prodNodes = newTable[string, MemoryNode[T]]()
   result.idAttrNodes = newTable[IdAttr, HashSet[ptr AlphaNode[T]]]()
   new result.thenNodes
