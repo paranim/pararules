@@ -258,8 +258,7 @@ proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: V
     session.leftActivation(node.child, vars, debugFacts, token)
 
 proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token[T]) =
-  if (token.kind == Insert or token.kind == Update) and node.condition.shouldTrigger:
-    node.prodNode.trigger = true
+  let trigger = (token.kind == Insert or token.kind == Update) and node.condition.shouldTrigger
   when defined(pararulesTest):
     proc newRefSeq[T](s: seq[T]): ref seq[T] =
       new(result)
@@ -267,6 +266,8 @@ proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token
   if node.parent == nil: # root node
     var vars = Vars[T]()
     if getVarsFromFact(vars, node.condition, token.fact):
+      if trigger:
+        node.prodNode.trigger = true
       let debugFacts: ref seq[Fact[T]] =
         when defined(pararulesTest):
           newRefSeq(newSeq[Fact[T]]())
@@ -281,6 +282,8 @@ proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token
         continue
       var newVars = vars # making a mutable copy here is far faster than making `vars` mutable above
       if getVarsFromFact(newVars, node.condition, token.fact):
+        if trigger:
+          node.prodNode.trigger = true
         let debugFacts: ref seq[Fact[T]] =
           when defined(pararulesTest):
             newRefSeq(node.parent.debugFacts[i])

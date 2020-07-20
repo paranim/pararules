@@ -557,6 +557,34 @@ test "don't use the fast update mechanism if it's part of a join":
   let prodNode = session.prodNodes["rule1"]
   check prodNode.debugFacts.len == 1
 
+test "multiple joins":
+  let rules =
+    ruleset:
+      rule rule1(Fact):
+        what:
+          (id1, LeftOf, Bob)
+          (id1, Color, color)
+          (id1, Height, height)
+          (id2, LeftOf, leftOf)
+          (id2, Color, color2, then = false)
+          (id2, Height, height2, then = false)
+        cond:
+          id2 != id1
+        then:
+          session.insert(id2, Color, "red")
+          session.insert(id2, Height, 72)
+
+  var session = initSession(Fact)
+  for r in rules.fields:
+    session.add(r)
+
+  session.insert(Alice, LeftOf, Bob)
+  session.insert(Alice, Color, "blue")
+  session.insert(Alice, Height, 60)
+  session.insert(Bob, LeftOf, Charlie)
+  session.insert(Bob, Color, "green")
+  session.insert(Bob, Height, 70)
+
 # this one is not used...
 # it's just here to make sure we can define
 # multiple schemas in one module
