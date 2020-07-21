@@ -42,6 +42,7 @@ type
   MemoryNode[T] = ref object
     parent: JoinNode[T]
     child: JoinNode[T]
+    leafNode: MemoryNode[T]
     vars: seq[Vars[T]]
     idAttrs: seq[IdAttr]
     enabledVars: seq[bool]
@@ -61,7 +62,6 @@ type
     child: MemoryNode[T]
     alphaNode: AlphaNode[T]
     condition: Condition[T]
-    leafNode: MemoryNode[T]
     idName: string
     disableFastUpdates: bool
 
@@ -130,7 +130,7 @@ proc isAncestor(x, y: JoinNode): bool =
   false
 
 proc add*[T, U](session: Session[T], production: Production[T, U]) =
-  var memNode: MemoryNode[T] = nil
+  var memNodes: seq[MemoryNode[T]]
   var joinNodes: seq[JoinNode[T]]
   let last = production.conditions.len - 1
   var
@@ -138,8 +138,9 @@ proc add*[T, U](session: Session[T], production: Production[T, U]) =
     joinedBindings: HashSet[string]
   for i in 0 .. last:
     var condition = production.conditions[i]
-    var leafNode = session.addNodes(condition.nodes)
-    var joinNode = JoinNode[T](parent: memNode, alphaNode: leafNode, condition: condition)
+    var leafAlphaNode = session.addNodes(condition.nodes)
+    let parentMemNode = if memNodes.len > 0: memNodes[memNodes.len - 1] else: nil
+    var joinNode = JoinNode[T](parent: parentMemNode, alphaNode: leafAlphaNode, condition: condition)
     for v in condition.vars:
       if bindings.contains(v.name):
         joinedBindings.incl(v.name)
@@ -147,26 +148,28 @@ proc add*[T, U](session: Session[T], production: Production[T, U]) =
           joinNode.idName = v.name
       else:
         bindings.incl(v.name)
-    if memNode != nil:
-      memNode.child = joinNode
-    leafNode.successors.add(joinNode)
+    if parentMemNode != nil:
+      parentMemNode.child = joinNode
+    leafAlphaNode.successors.add(joinNode)
     # successors must be sorted by ancestry (descendents first) to avoid duplicate rule firings
-    leafNode.successors.sort(proc (x, y: JoinNode[T]): int =
+    leafAlphaNode.successors.sort(proc (x, y: JoinNode[T]): int =
       if isAncestor(x, y): 1 else: -1)
-    var newMemNode = MemoryNode[T](parent: joinNode, nodeType: if i == last: Leaf else: Partial, condition: condition)
-    if newMemNode.nodeType == Leaf:
-      newMemNode.filter = production.filter
+    var memNode = MemoryNode[T](parent: joinNode, nodeType: if i == last: Leaf else: Partial, condition: condition)
+    if memNode.nodeType == Leaf:
+      memNode.filter = production.filter
       if production.callback != nil:
         var sess = session
-        newMemNode.callback = proc (vars: Vars[T]) = production.callback(sess, vars)
+        memNode.callback = proc (vars: Vars[T]) = production.callback(sess, vars)
       if session.leafNodes.hasKey(production.name):
         raise newException(Exception, production.name & " already exists in session")
-      session.leafNodes[production.name] = newMemNode
+      session.leafNodes[production.name] = memNode
+    memNodes.add(memNode)
     joinNodes.add(joinNode)
-    joinNode.child = newMemNode
-    memNode = newMemNode
+    joinNode.child = memNode
+  let leafMemNode = memNodes[memNodes.len - 1]
+  for node in memNodes:
+    node.leafNode = leafMemNode
   for node in joinNodes:
-    node.leafNode = memNode
     # disable fast updates for facts whose value is part of a join
     for v in node.condition.vars:
       if v.field == Value and joinedBindings.contains(v.name):
@@ -190,7 +193,7 @@ proc getVarsFromFact[T](vars: var Vars[T], condition: Condition[T], fact: Fact[T
           vars[v.name] = fact[2]
   true
 
-proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: Vars[T], debugFacts: ref seq[Fact[T]], token: Token[T])
+proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: Vars[T], debugFacts: ref seq[Fact[T]], token: Token[T], fromAlpha: bool)
 
 proc leftActivation[T](session: var Session[T], node: JoinNode[T], vars: Vars[T], debugFacts: ref seq[Fact[T]], token: Token[T]) =
   # SHORTCUT: if we know the id, only loop over alpha facts with that id
@@ -202,7 +205,7 @@ proc leftActivation[T](session: var Session[T], node: JoinNode[T], vars: Vars[T]
         if getVarsFromFact(newVars, node.condition, alphaFact):
           var newToken = token
           newToken.fact = alphaFact
-          session.leftActivation(node.child, newVars, debugFacts, newToken)
+          session.leftActivation(node.child, newVars, debugFacts, newToken, false)
   else:
     for factsForId in node.alphaNode.facts.values:
       for alphaFact in factsForId.values:
@@ -210,12 +213,15 @@ proc leftActivation[T](session: var Session[T], node: JoinNode[T], vars: Vars[T]
         if getVarsFromFact(newVars, node.condition, alphaFact):
           var newToken = token
           newToken.fact = alphaFact
-          session.leftActivation(node.child, newVars, debugFacts, newToken)
+          session.leftActivation(node.child, newVars, debugFacts, newToken, false)
 
-proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: Vars[T], debugFacts: ref seq[Fact[T]], token: Token[T]) =
+proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: Vars[T], debugFacts: ref seq[Fact[T]], token: Token[T], fromAlpha: bool) =
   let id = token.fact.id.type0
   let attr = token.fact.attr.type1.ord
   let idAttr = (id, attr)
+
+  if fromAlpha and (token.kind == Insert or token.kind == Update) and node.condition.shouldTrigger:
+    node.leafNode.trigger = true
 
   case token.kind:
   of Insert:
@@ -258,7 +264,6 @@ proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: V
     session.leftActivation(node.child, vars, debugFacts, token)
 
 proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token[T]) =
-  let trigger = (token.kind == Insert or token.kind == Update) and node.condition.shouldTrigger
   when defined(pararulesTest):
     proc newRefSeq[T](s: seq[T]): ref seq[T] =
       new(result)
@@ -266,14 +271,12 @@ proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token
   if node.parent == nil: # root node
     var vars = Vars[T]()
     if getVarsFromFact(vars, node.condition, token.fact):
-      if trigger:
-        node.leafNode.trigger = true
       let debugFacts: ref seq[Fact[T]] =
         when defined(pararulesTest):
           newRefSeq(newSeq[Fact[T]]())
         else:
           nil
-      session.leftActivation(node.child, vars, debugFacts, token)
+      session.leftActivation(node.child, vars, debugFacts, token, true)
   else:
     for i in 0 ..< node.parent.vars.len:
       let vars = node.parent.vars[i]
@@ -282,14 +285,12 @@ proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token
         continue
       var newVars = vars # making a mutable copy here is far faster than making `vars` mutable above
       if getVarsFromFact(newVars, node.condition, token.fact):
-        if trigger:
-          node.leafNode.trigger = true
         let debugFacts: ref seq[Fact[T]] =
           when defined(pararulesTest):
             newRefSeq(node.parent.debugFacts[i])
           else:
             nil
-        session.leftActivation(node.child, newVars, debugFacts, token)
+        session.leftActivation(node.child, newVars, debugFacts, token, true)
 
 proc rightActivation[T](session: var Session[T], node: var AlphaNode[T], token: Token[T]) =
   let id = token.fact.id.type0
