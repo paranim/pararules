@@ -553,6 +553,30 @@ test "multiple joins":
   session.insert(Bob, Color, "green")
   session.insert(Bob, Height, 70)
 
+test "join followed by non-join":
+  let rules =
+    ruleset:
+      rule rule1(Fact):
+        what:
+          (id1, LeftOf, Bob)
+          (id1, Color, color)
+          (id1, Height, height)
+          (Bob, RightOf, a)
+
+  var session = initSession(Fact)
+  for r in rules.fields:
+    session.add(r)
+
+  session.insert(Bob, RightOf, Alice)
+  session.insert(Alice, LeftOf, Bob)
+  session.insert(Alice, Color, "blue")
+  session.insert(Alice, Height, 60)
+  session.insert(Charlie, LeftOf, Bob)
+  session.insert(Charlie, Color, "green")
+  session.insert(Charlie, Height, 70)
+
+  check session.findAll(rules.rule1).len == 2
+
 # this one is not used...
 # it's just here to make sure we can define
 # multiple schemas in one module
