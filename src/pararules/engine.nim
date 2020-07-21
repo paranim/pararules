@@ -38,7 +38,7 @@ type
 
   # beta network
   MemoryNodeType = enum
-    Partial, Prod
+    Partial, Leaf
   MemoryNode[T] = ref object
     parent: JoinNode[T]
     child: JoinNode[T]
@@ -47,7 +47,7 @@ type
     enabledVars: seq[bool]
     condition: Condition[T]
     case nodeType: MemoryNodeType
-      of Prod:
+      of Leaf:
         callback: CallbackFn[T]
         trigger: bool
         thenQueue: seq[bool]
@@ -61,7 +61,7 @@ type
     child: MemoryNode[T]
     alphaNode: AlphaNode[T]
     condition: Condition[T]
-    prodNode: MemoryNode[T]
+    leafNode: MemoryNode[T]
     idName: string
     disableFastUpdates: bool
 
@@ -78,7 +78,7 @@ type
     filter: FilterFn[T]
   Session*[T] = object
     alphaNode: AlphaNode[T]
-    prodNodes*: ref Table[string, MemoryNode[T]]
+    leafNodes*: ref Table[string, MemoryNode[T]]
     idAttrNodes: ref Table[IdAttr, HashSet[ptr AlphaNode[T]]]
     insideRule*: bool
     thenNodes: ref HashSet[ptr MemoryNode[T]]
@@ -153,20 +153,20 @@ proc add*[T, U](session: Session[T], production: Production[T, U]) =
     # successors must be sorted by ancestry (descendents first) to avoid duplicate rule firings
     leafNode.successors.sort(proc (x, y: JoinNode[T]): int =
       if isAncestor(x, y): 1 else: -1)
-    var newMemNode = MemoryNode[T](parent: joinNode, nodeType: if i == last: Prod else: Partial, condition: condition)
-    if newMemNode.nodeType == Prod:
+    var newMemNode = MemoryNode[T](parent: joinNode, nodeType: if i == last: Leaf else: Partial, condition: condition)
+    if newMemNode.nodeType == Leaf:
       newMemNode.filter = production.filter
       if production.callback != nil:
         var sess = session
         newMemNode.callback = proc (vars: Vars[T]) = production.callback(sess, vars)
-      if session.prodNodes.hasKey(production.name):
+      if session.leafNodes.hasKey(production.name):
         raise newException(Exception, production.name & " already exists in session")
-      session.prodNodes[production.name] = newMemNode
+      session.leafNodes[production.name] = newMemNode
     joinNodes.add(joinNode)
     joinNode.child = newMemNode
     memNode = newMemNode
   for node in joinNodes:
-    node.prodNode = memNode
+    node.leafNode = memNode
     # disable fast updates for facts whose value is part of a join
     for v in node.condition.vars:
       if v.field == Value and joinedBindings.contains(v.name):
@@ -220,12 +220,12 @@ proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: V
   case token.kind:
   of Insert:
     node.vars.add(vars)
-    let enabled = node.nodeType != Prod or node.filter == nil or node.filter(vars)
+    let enabled = node.nodeType != Leaf or node.filter == nil or node.filter(vars)
     node.enabledVars.add(enabled)
     when defined(pararulesTest):
       debugFacts[].add(token.fact)
       node.debugFacts.add(debugFacts[])
-    if node.nodeType == Prod and node.callback != nil:
+    if node.nodeType == Leaf and node.callback != nil:
       let trigger = node.trigger and enabled
       node.thenQueue.add(trigger)
       if trigger:
@@ -237,24 +237,24 @@ proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: V
     node.enabledVars.delete(index)
     when defined(pararulesTest):
       node.debugFacts.delete(index)
-    if node.nodeType == Prod and node.callback != nil:
+    if node.nodeType == Leaf and node.callback != nil:
       node.thenQueue.delete(index)
     node.idAttrs.delete(index)
   of Update:
     let index = node.idAttrs.find(idAttr)
     node.vars[index] = vars
-    let enabled = node.nodeType != Prod or node.filter == nil or node.filter(vars)
+    let enabled = node.nodeType != Leaf or node.filter == nil or node.filter(vars)
     node.enabledVars[index] = enabled
     when defined(pararulesTest):
       debugFacts[].add(token.fact)
       node.debugFacts[index] = debugFacts[]
-    if node.nodeType == Prod and node.callback != nil:
+    if node.nodeType == Leaf and node.callback != nil:
       let trigger = node.trigger and enabled
       node.thenQueue[index] = trigger
       if trigger:
         session.thenNodes[].incl(node.addr)
 
-  if node.nodeType != Prod:
+  if node.nodeType != Leaf:
     session.leftActivation(node.child, vars, debugFacts, token)
 
 proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token[T]) =
@@ -267,7 +267,7 @@ proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token
     var vars = Vars[T]()
     if getVarsFromFact(vars, node.condition, token.fact):
       if trigger:
-        node.prodNode.trigger = true
+        node.leafNode.trigger = true
       let debugFacts: ref seq[Fact[T]] =
         when defined(pararulesTest):
           newRefSeq(newSeq[Fact[T]]())
@@ -283,7 +283,7 @@ proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token
       var newVars = vars # making a mutable copy here is far faster than making `vars` mutable above
       if getVarsFromFact(newVars, node.condition, token.fact):
         if trigger:
-          node.prodNode.trigger = true
+          node.leafNode.trigger = true
         let debugFacts: ref seq[Fact[T]] =
           when defined(pararulesTest):
             newRefSeq(node.parent.debugFacts[i])
@@ -408,7 +408,7 @@ proc retractFact*[T](session: var Session[T], id: T, attr: T) =
 
 proc initSession*[T](): Session[T] =
   result.alphaNode = new(AlphaNode[T])
-  result.prodNodes = newTable[string, MemoryNode[T]]()
+  result.leafNodes = newTable[string, MemoryNode[T]]()
   result.idAttrNodes = newTable[IdAttr, HashSet[ptr AlphaNode[T]]]()
   new result.thenNodes
   result.thenNodes[] = initHashSet[ptr MemoryNode[T]]()
@@ -426,32 +426,32 @@ proc matches[I, T](vars: Vars[T], params: array[I, (string, T)]): bool =
   true
 
 proc findIndex*[I, T](session: Session, prod: Production, params: array[I, (string, T)]): int =
-  let vars = session.prodNodes[prod.name].vars
+  let vars = session.leafNodes[prod.name].vars
   result = vars.len - 1
   while result >= 0:
-    if session.prodNodes[prod.name].enabledVars[result] and matches(vars[result], params):
+    if session.leafNodes[prod.name].enabledVars[result] and matches(vars[result], params):
       break
     result = result - 1
 
 proc findIndex*(session: Session, prod: Production): int =
-  let vars = session.prodNodes[prod.name].vars
+  let vars = session.leafNodes[prod.name].vars
   result = vars.len - 1
   while result >= 0:
-    if session.prodNodes[prod.name].enabledVars[result]:
+    if session.leafNodes[prod.name].enabledVars[result]:
       break
     result = result - 1
 
 proc findAllIndices*[I, T](session: Session, prod: Production, params: array[I, (string, T)]): seq[int] =
-  let vars = session.prodNodes[prod.name].vars
+  let vars = session.leafNodes[prod.name].vars
   for i in 0 ..< vars.len:
-    if session.prodNodes[prod.name].enabledVars[i] and matches(vars[i], params):
+    if session.leafNodes[prod.name].enabledVars[i] and matches(vars[i], params):
       result.add(i)
 
 proc findAllIndices*(session: Session, prod: Production): seq[int] =
-  let vars = session.prodNodes[prod.name].vars
+  let vars = session.leafNodes[prod.name].vars
   for i in 0 ..< vars.len:
-    if session.prodNodes[prod.name].enabledVars[i]:
+    if session.leafNodes[prod.name].enabledVars[i]:
       result.add(i)
 
 proc get*[T, U](session: Session[T], prod: Production[T, U], i: int): U =
-  prod.query(session.prodNodes[prod.name].vars[i])
+  prod.query(session.leafNodes[prod.name].vars[i])

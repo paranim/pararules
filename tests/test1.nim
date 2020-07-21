@@ -37,7 +37,7 @@ test "number of conditions != number of facts":
         check y == Yair
         check z == Zach
 
-  let prodNode = session.prodNodes["numCondsAndFacts"]
+  let prodNode = session.leafNodes["numCondsAndFacts"]
 
   session.insert(Bob, Color, "blue")
   session.insert(Yair, LeftOf, Zach)
@@ -72,7 +72,7 @@ test "adding facts out of order":
         check y == Yair
         check z == Zach
 
-  let prodNode = session.prodNodes["outOfOrder"]
+  let prodNode = session.leafNodes["outOfOrder"]
 
   session.insert(Xavier, RightOf, Yair)
   session.insert(Yair, LeftOf, Zach)
@@ -100,7 +100,7 @@ test "duplicate facts":
         (y, Color, c)
   session.add(rule1)
 
-  let prodNode = session.prodNodes["duplicateFacts"]
+  let prodNode = session.leafNodes["duplicateFacts"]
 
   session.insert(Bob, Self, Bob)
   session.insert(Bob, Color, "red")
@@ -126,7 +126,7 @@ test "removing facts":
         (a, Color, "maize")
         (y, RightOf, b)
 
-  let prodNode = session.prodNodes["removingFacts"]
+  let prodNode = session.leafNodes["removingFacts"]
 
   session.insert(Bob, Color, "blue")
   session.insert(Yair, LeftOf, Zach)
@@ -163,7 +163,7 @@ test "updating facts":
       then:
         zVal = z
 
-  let prodNode = session.prodNodes["updatingFacts"]
+  let prodNode = session.leafNodes["updatingFacts"]
 
   session.insert(Bob, Color, "blue")
   session.insert(Yair, LeftOf, Zach)
@@ -186,7 +186,7 @@ test "updating facts in different alpha nodes":
         (a, Color, "maize")
         (y, RightOf, b)
 
-  let prodNode = session.prodNodes["updatingFactsDiffNodes"]
+  let prodNode = session.leafNodes["updatingFactsDiffNodes"]
 
   session.insert(Bob, Color, "blue")
   session.insert(Yair, LeftOf, Zach)
@@ -335,8 +335,8 @@ test "creating a ruleset":
   for r in rules.fields:
     session.add(r)
 
-  let bobNode = session.prodNodes["bob"]
-  let aliceNode = session.prodNodes["alice"]
+  let bobNode = session.leafNodes["bob"]
+  let aliceNode = session.leafNodes["alice"]
 
   session.insert(Bob, Color, "blue")
   session.insert(Bob, RightOf, Alice)
@@ -437,9 +437,9 @@ test "inserting inside a rule cascades":
 
   session.insert(Bob, Color, "blue")
 
-  let first = session.prodNodes["firstRule"]
-  let second = session.prodNodes["secondRule"]
-  let third = session.prodNodes["thirdRule"]
+  let first = session.leafNodes["firstRule"]
+  let second = session.leafNodes["secondRule"]
+  let third = session.leafNodes["thirdRule"]
 
   check first.debugFacts.len == 1
   check second.debugFacts.len == 1
@@ -519,7 +519,7 @@ test "IDs can be arbitrary integers":
         check y == Yair
         check z == zach
 
-  let prodNode = session.prodNodes["rule1"]
+  let prodNode = session.leafNodes["rule1"]
 
   session.insert(Bob, Color, "blue")
   session.insert(Yair, LeftOf, zach)
@@ -554,7 +554,7 @@ test "don't use the fast update mechanism if it's part of a join":
   session.insert(Bob, LeftOf, Charlie)
   check session.query(rules.rule1).id == Charlie
 
-  let prodNode = session.prodNodes["rule1"]
+  let prodNode = session.leafNodes["rule1"]
   check prodNode.debugFacts.len == 1
 
 test "multiple joins":
