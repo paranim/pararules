@@ -15,12 +15,18 @@ type
     of Update:
       oldFact: Fact[T]
   IdAttr = tuple[id: int, attr: int]
+  IdAttrs = seq[IdAttr]
 
-  # vars
+  # matches
   Vars[T] = Table[string, T]
   Var* = object
     name*: string
     field: Field
+  Match[T] = object
+    id: int
+    vars: Vars[T]
+    enabled: bool
+    trigger: bool
 
   # functions
   CallbackFn[T] = proc (vars: Vars[T])
@@ -43,27 +49,23 @@ type
     parent: JoinNode[T]
     child: JoinNode[T]
     leafNode: MemoryNode[T]
-    vars: seq[Vars[T]]
-    idAttrs: seq[IdAttr]
-    enabledVars: seq[bool]
+    lastMatchId: int
+    matches: Table[IdAttrs, Match[T]]
+    matchIds: Table[int, IdAttrs]
     condition: Condition[T]
     case nodeType: MemoryNodeType
       of Leaf:
         callback: CallbackFn[T]
         trigger: bool
-        thenQueue: seq[bool]
         filter: FilterFn[T]
       else:
         nil
-    when defined(pararulesTest):
-      debugFacts*: seq[seq[Fact[T]]]
   JoinNode[T] = ref object
     parent: MemoryNode[T]
     child: MemoryNode[T]
     alphaNode: AlphaNode[T]
     condition: Condition[T]
     idName: string
-    disableFastUpdates: bool
 
   # session
   Condition[T] = object
@@ -78,7 +80,7 @@ type
     filter: FilterFn[T]
   Session*[T] = object
     alphaNode: AlphaNode[T]
-    leafNodes*: ref Table[string, MemoryNode[T]]
+    leafNodes: ref Table[string, MemoryNode[T]]
     idAttrNodes: ref Table[IdAttr, HashSet[ptr AlphaNode[T]]]
     insideRule*: bool
     thenNodes: ref HashSet[ptr MemoryNode[T]]
@@ -132,7 +134,6 @@ proc isAncestor(x, y: JoinNode): bool =
 
 proc add*[T, U](session: Session[T], production: Production[T, U]) =
   var memNodes: seq[MemoryNode[T]]
-  var joinNodes: seq[JoinNode[T]]
   let last = production.conditions.len - 1
   var
     bindings: HashSet[string]
@@ -165,17 +166,10 @@ proc add*[T, U](session: Session[T], production: Production[T, U]) =
         raise newException(Exception, production.name & " already exists in session")
       session.leafNodes[production.name] = memNode
     memNodes.add(memNode)
-    joinNodes.add(joinNode)
     joinNode.child = memNode
   let leafMemNode = memNodes[memNodes.len - 1]
   for node in memNodes:
     node.leafNode = leafMemNode
-  for node in joinNodes:
-    # disable fast updates for facts whose value is part of a join
-    for v in node.condition.vars:
-      if v.field == Value and joinedBindings.contains(v.name):
-        node.disableFastUpdates = true
-        break
 
 proc getVarsFromFact[T](vars: var Vars[T], condition: Condition[T], fact: Fact[T]): bool =
   for v in condition.vars:
@@ -194,9 +188,15 @@ proc getVarsFromFact[T](vars: var Vars[T], condition: Condition[T], fact: Fact[T
           vars[v.name] = fact[2]
   true
 
-proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: Vars[T], debugFacts: ref seq[Fact[T]], token: Token[T], fromAlpha: bool)
+proc getIdAttr[T](fact: Fact[T]): IdAttr =
+  let
+    id = fact.id.type0
+    attr = fact.attr.type1.ord
+  (id, attr)
 
-proc leftActivation[T](session: var Session[T], node: JoinNode[T], vars: Vars[T], debugFacts: ref seq[Fact[T]], token: Token[T]) =
+proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], idAttrs: IdAttrs, vars: Vars[T], token: Token[T], fromAlpha: bool)
+
+proc leftActivation[T](session: var Session[T], node: JoinNode[T], idAttrs: IdAttrs, vars: Vars[T], token: Token[T]) =
   # SHORTCUT: if we know the id, only loop over alpha facts with that id
   if node.idName != "":
     let id = vars[node.idName].type0
@@ -204,121 +204,79 @@ proc leftActivation[T](session: var Session[T], node: JoinNode[T], vars: Vars[T]
       for alphaFact in node.alphaNode.facts[id].values:
         var newVars = vars
         if getVarsFromFact(newVars, node.condition, alphaFact):
+          var newIdAttrs = idAttrs
+          newIdAttrs.add(alphaFact.getIdAttr)
           var newToken = token
           newToken.fact = alphaFact
-          session.leftActivation(node.child, newVars, debugFacts, newToken, false)
+          session.leftActivation(node.child, newIdAttrs, newVars, newToken, false)
   else:
     for factsForId in node.alphaNode.facts.values:
       for alphaFact in factsForId.values:
         var newVars = vars
         if getVarsFromFact(newVars, node.condition, alphaFact):
+          var newIdAttrs = idAttrs
+          newIdAttrs.add(alphaFact.getIdAttr)
           var newToken = token
           newToken.fact = alphaFact
-          session.leftActivation(node.child, newVars, debugFacts, newToken, false)
+          session.leftActivation(node.child, newIdAttrs, newVars, newToken, false)
 
-proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], vars: Vars[T], debugFacts: ref seq[Fact[T]], token: Token[T], fromAlpha: bool) =
-  let id = token.fact.id.type0
-  let attr = token.fact.attr.type1.ord
-  let idAttr = (id, attr)
-
+proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], idAttrs: IdAttrs, vars: Vars[T], token: Token[T], fromAlpha: bool) =
   if fromAlpha and (token.kind == Insert or token.kind == Update) and node.condition.shouldTrigger:
     node.leafNode.trigger = true
 
   case token.kind:
-  of Insert:
-    node.vars.add(vars)
+  of Insert, Update:
     let enabled = node.nodeType != Leaf or node.filter == nil or node.filter(vars)
-    node.enabledVars.add(enabled)
-    when defined(pararulesTest):
-      debugFacts[].add(token.fact)
-      node.debugFacts.add(debugFacts[])
-    if node.nodeType == Leaf and node.callback != nil:
-      let trigger = node.trigger and enabled
-      node.thenQueue.add(trigger)
-      if trigger:
-        session.thenNodes[].incl(node.addr)
-    node.idAttrs.add(idAttr)
+    let trigger = node.nodeType == Leaf and node.trigger and enabled
+    node.lastMatchId += 1
+    node.matchIds[node.lastMatchId] = idAttrs
+    node.matches[idAttrs] = Match[T](id: node.lastMatchId, vars: vars, enabled: enabled, trigger: trigger)
+    if node.nodeType == Leaf and node.callback != nil and trigger:
+      session.thenNodes[].incl(node.addr)
   of Retract:
-    let index = node.idAttrs.find(idAttr)
-    node.vars.delete(index)
-    node.enabledVars.delete(index)
-    when defined(pararulesTest):
-      node.debugFacts.delete(index)
-    if node.nodeType == Leaf and node.callback != nil:
-      node.thenQueue.delete(index)
-    node.idAttrs.delete(index)
-  of Update:
-    let index = node.idAttrs.find(idAttr)
-    node.vars[index] = vars
-    let enabled = node.nodeType != Leaf or node.filter == nil or node.filter(vars)
-    node.enabledVars[index] = enabled
-    when defined(pararulesTest):
-      debugFacts[].add(token.fact)
-      node.debugFacts[index] = debugFacts[]
-    if node.nodeType == Leaf and node.callback != nil:
-      let trigger = node.trigger and enabled
-      node.thenQueue[index] = trigger
-      if trigger:
-        session.thenNodes[].incl(node.addr)
+    node.matchIds.del(node.matches[idAttrs].id)
+    node.matches.del(idAttrs)
 
   if node.nodeType != Leaf:
-    session.leftActivation(node.child, vars, debugFacts, token)
+    session.leftActivation(node.child, idAttrs, vars, token)
 
-proc rightActivation[T](session: var Session[T], node: JoinNode[T], token: Token[T]) =
-  when defined(pararulesTest):
-    proc newRefSeq[T](s: seq[T]): ref seq[T] =
-      new(result)
-      result[] = s
+proc rightActivation[T](session: var Session[T], node: JoinNode[T], idAttr: IdAttr, token: Token[T]) =
   if node.parent == nil: # root node
     var vars = Vars[T]()
     if getVarsFromFact(vars, node.condition, token.fact):
-      let debugFacts: ref seq[Fact[T]] =
-        when defined(pararulesTest):
-          newRefSeq(newSeq[Fact[T]]())
-        else:
-          nil
-      session.leftActivation(node.child, vars, debugFacts, token, true)
+      session.leftActivation(node.child, @[idAttr], vars, token, true)
   else:
-    for i in 0 ..< node.parent.vars.len:
-      let vars = node.parent.vars[i]
+    for idAttrs, match in node.parent.matches.pairs:
+      let vars = match.vars
       # SHORTCUT: if we know the id, compare it with the token right away
       if node.idName != "" and vars[node.idName].type0 != token.fact.id.type0:
         continue
       var newVars = vars # making a mutable copy here is far faster than making `vars` mutable above
+      var newIdAttrs = idAttrs
+      newIdAttrs.add(idAttr)
       if getVarsFromFact(newVars, node.condition, token.fact):
-        let debugFacts: ref seq[Fact[T]] =
-          when defined(pararulesTest):
-            newRefSeq(node.parent.debugFacts[i])
-          else:
-            nil
-        session.leftActivation(node.child, newVars, debugFacts, token, true)
+        session.leftActivation(node.child, newIdAttrs, newVars, token, true)
 
 proc rightActivation[T](session: var Session[T], node: var AlphaNode[T], token: Token[T]) =
-  let id = token.fact.id.type0
-  let attr = token.fact.attr.type1.ord
-  let idAttr = (id, attr)
+  let idAttr = token.fact.getIdAttr
   case token.kind:
   of Insert:
-    if not node.facts.hasKey(id):
-      node.facts[id] = initTable[int, Fact[T]]()
-    node.facts[id][attr] = token.fact
+    if not node.facts.hasKey(idAttr.id):
+      node.facts[idAttr.id] = initTable[int, Fact[T]]()
+    node.facts[idAttr.id][idAttr.attr] = token.fact
     if not session.idAttrNodes.hasKey(idAttr):
       session.idAttrNodes[idAttr] = initHashSet[ptr AlphaNode[T]](initialSize = 4)
     let exists = session.idAttrNodes[idAttr].containsOrIncl(node.addr)
     assert not exists
   of Retract:
-    node.facts[id].del(attr)
+    node.facts[idAttr.id].del(idAttr.attr)
     let missing = session.idAttrNodes[idAttr].missingOrExcl(node.addr)
     assert not missing
   of Update:
-    assert node.facts[id][attr] == token.oldFact
-    node.facts[id][attr] = token.fact
+    assert node.facts[idAttr.id][idAttr.attr] == token.oldFact
+    node.facts[idAttr.id][idAttr.attr] = token.fact
   for child in node.successors:
-    if token.kind == Update and child.disableFastUpdates:
-      session.rightActivation(child, Token[T](fact: token.oldFact, kind: Retract))
-      session.rightActivation(child, Token[T](fact: token.fact, kind: Insert))
-    else:
-      session.rightActivation(child, token)
+    session.rightActivation(child, idAttr, token)
 
 proc fireRules*[T](session: var Session[T]) =
   # find all nodes with `then` blocks that need executed
@@ -332,10 +290,9 @@ proc fireRules*[T](session: var Session[T]) =
   var thenQueue: seq[(MemoryNode[T], Vars[T])]
   for node in thenNodes:
     node.trigger = false
-    for i in 0 ..< node.thenQueue.len:
-      if node.thenQueue[i]:
-        thenQueue.add((node: node[], vars: node.vars[i]))
-        node.thenQueue[i] = false
+    for match in node.matches.values:
+      if match.trigger:
+        thenQueue.add((node: node[], vars: match.vars))
   # execute `then` blocks
   for (node, vars) in thenQueue:
     node.callback(vars)
@@ -358,9 +315,7 @@ proc getAlphaNodesForFact[T](session: var Session[T], node: var AlphaNode[T], fa
       session.getAlphaNodesForFact(child, fact, false, nodes)
 
 proc upsertFact[T](session: var Session[T], fact: Fact[T], nodes: HashSet[ptr AlphaNode[T]]) =
-  let id = fact.id.type0
-  let attr = fact.attr.type1.ord
-  let idAttr = (id, attr)
+  let idAttr = fact.getIdAttr
   if not session.idAttrNodes.hasKey(idAttr):
     for n in nodes.items:
       session.rightActivation(n[], Token[T](fact: fact, kind: Insert))
@@ -389,13 +344,11 @@ proc insertFact*[T](session: var Session[T], fact: Fact[T]) =
     session.fireRules()
 
 proc retractFact*[T](session: var Session[T], fact: Fact[T]) =
-  let id = fact.id.type0
-  let attr = fact.attr.type1.ord
-  let idAttr = (id, attr)
+  let idAttr = fact.getIdAttr
   # we use toSeq here to make a copy of idAttrNodes[idAttr], since
   # rightActivation will modify it
   for node in session.idAttrNodes[idAttr].items.toSeq:
-    assert fact == node.facts[id][attr]
+    assert fact == node.facts[idAttr.id][idAttr.attr]
     session.rightActivation(node[], Token[T](fact: fact, kind: Retract))
 
 proc retractFact*[T](session: var Session[T], id: T, attr: T) =
@@ -422,39 +375,34 @@ proc initProduction*[T, U](name: string, cb: SessionCallbackFn[T], query: QueryF
   result.query = query
   result.filter = filter
 
-proc matches[I, T](vars: Vars[T], params: array[I, (string, T)]): bool =
+proc matchesParams[I, T](vars: Vars[T], params: array[I, (string, T)]): bool =
   for (varName, val) in params:
     if vars[varname] != val:
       return false
   true
 
 proc findIndex*[I, T](session: Session, prod: Production, params: array[I, (string, T)]): int =
-  let vars = session.leafNodes[prod.name].vars
-  result = vars.len - 1
-  while result >= 0:
-    if session.leafNodes[prod.name].enabledVars[result] and matches(vars[result], params):
-      break
-    result = result - 1
+  for match in session.leafNodes[prod.name].matches.values:
+    if match.enabled and matchesParams(match.vars, params):
+      return match.id
+  -1
 
 proc findIndex*(session: Session, prod: Production): int =
-  let vars = session.leafNodes[prod.name].vars
-  result = vars.len - 1
-  while result >= 0:
-    if session.leafNodes[prod.name].enabledVars[result]:
-      break
-    result = result - 1
+  for match in session.leafNodes[prod.name].matches.values:
+    if match.enabled:
+      return match.id
+  -1
 
 proc findAllIndices*[I, T](session: Session, prod: Production, params: array[I, (string, T)]): seq[int] =
-  let vars = session.leafNodes[prod.name].vars
-  for i in 0 ..< vars.len:
-    if session.leafNodes[prod.name].enabledVars[i] and matches(vars[i], params):
-      result.add(i)
+  for match in session.leafNodes[prod.name].matches.values:
+    if match.enabled and matchesParams(match.vars, params):
+      result.add(match.id)
 
 proc findAllIndices*(session: Session, prod: Production): seq[int] =
-  let vars = session.leafNodes[prod.name].vars
-  for i in 0 ..< vars.len:
-    if session.leafNodes[prod.name].enabledVars[i]:
-      result.add(i)
+  for match in session.leafNodes[prod.name].matches.values:
+    if match.enabled:
+      result.add(match.id)
 
 proc get*[T, U](session: Session[T], prod: Production[T, U], i: int): U =
-  prod.query(session.leafNodes[prod.name].vars[i])
+  let idAttrs = session.leafNodes[prod.name].matchIds[i]
+  prod.query(session.leafNodes[prod.name].matches[idAttrs].vars)

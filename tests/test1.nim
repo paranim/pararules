@@ -23,7 +23,7 @@ proc `==`(a: int, b: Id): bool =
 
 test "number of conditions != number of facts":
   var session = initSession(Fact)
-  session.add:
+  let rule1 =
     rule numCondsAndFacts(Fact):
       what:
         (b, Color, "blue")
@@ -36,8 +36,7 @@ test "number of conditions != number of facts":
         check b == Bob
         check y == Yair
         check z == Zach
-
-  let prodNode = session.leafNodes["numCondsAndFacts"]
+  session.add(rule1)
 
   session.insert(Bob, Color, "blue")
   session.insert(Yair, LeftOf, Zach)
@@ -48,12 +47,11 @@ test "number of conditions != number of facts":
   session.insert(Thomas, Height, 72)
   session.insert(George, Height, 72)
 
-  check prodNode.debugFacts.len == 3
-  check prodNode.debugFacts[0].len == 5
+  check session.findAll(rule1).len == 3
 
 test "adding facts out of order":
   var session = initSession(Fact)
-  session.add:
+  let rule1 =
     rule outOfOrder(Fact):
       what:
         (x, RightOf, y)
@@ -71,8 +69,7 @@ test "adding facts out of order":
         check b == Bob
         check y == Yair
         check z == Zach
-
-  let prodNode = session.leafNodes["outOfOrder"]
+  session.add(rule1)
 
   session.insert(Xavier, RightOf, Yair)
   session.insert(Yair, LeftOf, Zach)
@@ -87,8 +84,7 @@ test "adding facts out of order":
 
   session.insert(David, Color, "white")
 
-  check prodNode.debugFacts.len == 1
-  check prodNode.debugFacts[0].len == 10
+  check session.findAll(rule1).len == 1
 
 test "duplicate facts":
   var session = initSession(Fact)
@@ -100,60 +96,50 @@ test "duplicate facts":
         (y, Color, c)
   session.add(rule1)
 
-  let prodNode = session.leafNodes["duplicateFacts"]
-
   session.insert(Bob, Self, Bob)
   session.insert(Bob, Color, "red")
 
-  check prodNode.debugFacts.len == 1
-  check prodNode.debugFacts[0].len == 3
+  check session.findAll(rule1).len == 1
   check session.query(rule1).c == "red"
 
   # update *both* duplicate facts from red to green
   session.insert(Bob, Color, "green")
 
-  check prodNode.debugFacts.len == 1
-  check prodNode.debugFacts[0].len == 3
+  check session.findAll(rule1).len == 1
   check session.query(rule1).c == "green"
 
 test "removing facts":
   var session = initSession(Fact)
-  session.add:
+  let rule1 =
     rule removingFacts(Fact):
       what:
         (b, Color, "blue")
         (y, LeftOf, z)
         (a, Color, "maize")
         (y, RightOf, b)
-
-  let prodNode = session.leafNodes["removingFacts"]
+  session.add(rule1)
 
   session.insert(Bob, Color, "blue")
   session.insert(Yair, LeftOf, Zach)
   session.insert(Alice, Color, "maize")
   session.insert(Yair, RightOf, Bob)
-  check prodNode.debugFacts.len == 1
+  check session.findAll(rule1).len == 1
 
   session.retract(Yair, RightOf, Bob)
-  check prodNode.debugFacts.len == 0
-  check prodNode.getParent.debugFacts.len == 1
-  check prodNode.getParent.debugFacts[0].len == 3
+  check session.findAll(rule1).len == 0
 
   session.retract(Bob, Color) # value parameter is not required
-  check prodNode.debugFacts.len == 0
-  check prodNode.getParent.debugFacts.len == 0
+  check session.findAll(rule1).len == 0
 
   # re-insert to make sure idAttrNodes was cleared correctly
   session.insert(Bob, Color, "blue")
   session.insert(Yair, RightOf, Bob)
-  check prodNode.debugFacts.len == 1
-  check prodNode.getParent.debugFacts.len == 1
-  check prodNode.getParent.debugFacts[0].len == 3
+  check session.findAll(rule1).len == 1
 
 test "updating facts":
   var session = initSession(Fact, autoFire = false)
   var zVal: int
-  session.add:
+  let rule1 =
     rule updatingFacts(Fact):
       what:
         (b, Color, "blue")
@@ -162,42 +148,40 @@ test "updating facts":
         (y, RightOf, b)
       then:
         zVal = z
-
-  let prodNode = session.leafNodes["updatingFacts"]
+  session.add(rule1)
 
   session.insert(Bob, Color, "blue")
   session.insert(Yair, LeftOf, Zach)
   session.insert(Alice, Color, "maize")
   session.insert(Yair, RightOf, Bob)
   session.fireRules()
-  check prodNode.debugFacts.len == 1
+  check session.findAll(rule1).len == 1
   check zVal == Zach
 
   session.insert(Yair, LeftOf, Xavier)
   session.fireRules()
-  check prodNode.debugFacts.len == 1
+  check session.findAll(rule1).len == 1
   check zVal == Xavier
 
 test "updating facts in different alpha nodes":
   var session = initSession(Fact)
-  session.add:
+  let rule1 =
     rule updatingFactsDiffNodes(Fact):
       what:
         (b, Color, "blue")
         (y, LeftOf, Zach)
         (a, Color, "maize")
         (y, RightOf, b)
-
-  let prodNode = session.leafNodes["updatingFactsDiffNodes"]
+  session.add(rule1)
 
   session.insert(Bob, Color, "blue")
   session.insert(Yair, LeftOf, Zach)
   session.insert(Alice, Color, "maize")
   session.insert(Yair, RightOf, Bob)
-  check prodNode.debugFacts.len == 1
+  check session.findAll(rule1).len == 1
 
   session.insert(Yair, LeftOf, Xavier)
-  check prodNode.debugFacts.len == 0
+  check session.findAll(rule1).len == 0
 
 test "facts can be stored in multiple alpha nodes":
   var session = initSession(Fact)
@@ -310,10 +294,6 @@ test "queries":
 
   let locs = session.findAll(getPerson, height = 72)
   check locs.len == 2
-  let res1 = session.get(getPerson, locs[0])
-  let res2 = session.get(getPerson, locs[1])
-  check res1.id == Bob
-  check res2.id == Charlie
 
 test "creating a ruleset":
   let rules =
@@ -337,16 +317,13 @@ test "creating a ruleset":
   for r in rules.fields:
     session.add(r)
 
-  let bobNode = session.leafNodes["bob"]
-  let aliceNode = session.leafNodes["alice"]
-
   session.insert(Bob, Color, "blue")
   session.insert(Bob, RightOf, Alice)
   session.insert(Alice, Color, "red")
   session.insert(Alice, LeftOf, Bob)
 
-  check bobNode.debugFacts.len == 1
-  check aliceNode.debugFacts.len == 1
+  check session.findAll(rules.bob).len == 1
+  check session.findAll(rules.alice).len == 1
 
 test "don't trigger rule when updating certain facts":
   var count = 0
@@ -439,13 +416,9 @@ test "inserting inside a rule cascades":
 
   session.insert(Bob, Color, "blue")
 
-  let first = session.leafNodes["firstRule"]
-  let second = session.leafNodes["secondRule"]
-  let third = session.leafNodes["thirdRule"]
-
-  check first.debugFacts.len == 1
-  check second.debugFacts.len == 1
-  check third.debugFacts.len == 1
+  check session.findAll(rules.firstRule).len == 1
+  check session.findAll(rules.secondRule).len == 1
+  check session.findAll(rules.thirdRule).len == 1
 
 test "conditions can use external values":
   var session = initSession(Fact)
@@ -507,7 +480,7 @@ test "id + attr combos can be stored in multiple alpha nodes":
 test "IDs can be arbitrary integers":
   let zach = Id.high.ord + 1
   var session = initSession(Fact)
-  session.add:
+  let rule1 =
     rule rule1(Fact):
       what:
         (b, Color, "blue")
@@ -520,8 +493,7 @@ test "IDs can be arbitrary integers":
         check b == Bob
         check y == Yair
         check z == zach
-
-  let prodNode = session.leafNodes["rule1"]
+  session.add(rule1)
 
   session.insert(Bob, Color, "blue")
   session.insert(Yair, LeftOf, zach)
@@ -529,10 +501,9 @@ test "IDs can be arbitrary integers":
   session.insert(Yair, RightOf, Bob)
   session.insert(zach, LeftOf, Bob)
 
-  check prodNode.debugFacts.len == 1
-  check prodNode.debugFacts[0].len == 5
+  check session.findAll(rule1).len == 1
 
-test "don't use the fast update mechanism if it's part of a join":
+test "join value with id":
   let rules =
     ruleset:
       rule rule1(Fact):
@@ -551,13 +522,8 @@ test "don't use the fast update mechanism if it's part of a join":
   session.insert(Charlie, Height, 72)
 
   session.insert(Bob, LeftOf, Alice)
-  check session.query(rules.rule1).id == Alice
 
-  session.insert(Bob, LeftOf, Charlie)
-  check session.query(rules.rule1).id == Charlie
-
-  let prodNode = session.leafNodes["rule1"]
-  check prodNode.debugFacts.len == 1
+  check session.findAll(rules.rule1).len == 1
 
 test "multiple joins":
   let rules =

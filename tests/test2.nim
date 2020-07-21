@@ -253,7 +253,7 @@ test "joins and advanced queries":
   check player == ch
 
   let index = session.find(rules.getCharacter, id = Player)
-  check index == 0
+  check index != -1
 
   let player2 = session.query(rules.getPlayer)
   check player2.x == 0.0
