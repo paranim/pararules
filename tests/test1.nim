@@ -151,7 +151,7 @@ test "removing facts":
   check prodNode.getParent.debugFacts[0].len == 3
 
 test "updating facts":
-  var session = initSession(Fact)
+  var session = initSession(Fact, autoFire = false)
   var zVal: int
   session.add:
     rule updatingFacts(Fact):
@@ -169,10 +169,12 @@ test "updating facts":
   session.insert(Yair, LeftOf, Zach)
   session.insert(Alice, Color, "maize")
   session.insert(Yair, RightOf, Bob)
+  session.fireRules()
   check prodNode.debugFacts.len == 1
   check zVal == Zach
 
   session.insert(Yair, LeftOf, Xavier)
+  session.fireRules()
   check prodNode.debugFacts.len == 1
   check zVal == Xavier
 

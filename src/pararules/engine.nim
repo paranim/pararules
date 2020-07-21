@@ -82,6 +82,7 @@ type
     idAttrNodes: ref Table[IdAttr, HashSet[ptr AlphaNode[T]]]
     insideRule*: bool
     thenNodes: ref HashSet[ptr MemoryNode[T]]
+    autoFire: bool
 
 proc getParent*(node: MemoryNode): MemoryNode =
   node.parent.parent
@@ -319,7 +320,7 @@ proc rightActivation[T](session: var Session[T], node: var AlphaNode[T], token: 
     else:
       session.rightActivation(child, token)
 
-proc triggerThenBlocks[T](session: var Session[T]) =
+proc fireRules*[T](session: var Session[T]) =
   # find all nodes with `then` blocks that need executed
   var thenNodes: seq[ptr MemoryNode[T]]
   for node in session.thenNodes[].items:
@@ -339,7 +340,7 @@ proc triggerThenBlocks[T](session: var Session[T]) =
   for (node, vars) in thenQueue:
     node.callback(vars)
   # recur because there may be new `then` blocks to execute
-  session.triggerThenBlocks()
+  session.fireRules()
 
 proc getAlphaNodesForFact[T](session: var Session[T], node: var AlphaNode[T], fact: Fact[T], root: bool, nodes: var HashSet[ptr AlphaNode[T]]) =
   if root:
@@ -384,8 +385,8 @@ proc insertFact*[T](session: var Session[T], fact: Fact[T]) =
   var nodes = initHashSet[ptr AlphaNode[T]](initialSize = 4)
   getAlphaNodesForFact(session, session.alphaNode, fact, true, nodes)
   session.upsertFact(fact, nodes)
-  if not session.insideRule:
-    session.triggerThenBlocks()
+  if session.autoFire and not session.insideRule:
+    session.fireRules()
 
 proc retractFact*[T](session: var Session[T], fact: Fact[T]) =
   let id = fact.id.type0
@@ -407,12 +408,13 @@ proc retractFact*[T](session: var Session[T], id: T, attr: T) =
     let fact = node.facts[id][attr]
     session.rightActivation(node[], Token[T](fact: fact, kind: Retract))
 
-proc initSession*[T](): Session[T] =
+proc initSession*[T](autoFire: bool = true): Session[T] =
   result.alphaNode = new(AlphaNode[T])
   result.leafNodes = newTable[string, MemoryNode[T]]()
   result.idAttrNodes = newTable[IdAttr, HashSet[ptr AlphaNode[T]]]()
   new result.thenNodes
   result.thenNodes[] = initHashSet[ptr MemoryNode[T]]()
+  result.autoFire = autoFire
 
 proc initProduction*[T, U](name: string, cb: SessionCallbackFn[T], query: QueryFn[T, U], filter: FilterFn[T]): Production[T, U] =
   result.name = name

@@ -549,9 +549,13 @@ use `Strings` in the schema.
 # these wrapper macros are only here so
 # the engine doesn't need to be imported directly
 
-macro initSession*(dataType: type): untyped =
+macro initSession*(dataType: type, autoFire: bool = true): untyped =
   quote do:
-    initSession[`dataType`]()
+    initSession[`dataType`](`autoFire`)
+
+macro fireRules*(session: Session) =
+  quote do:
+    fireRules(`session`)
 
 macro add*(session: Session, production: Production): untyped =
   quote do:
