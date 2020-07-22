@@ -227,10 +227,16 @@ proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], idAttrs
   # add or remove the match
   case token.kind:
   of Insert, Update:
-    let enabled = node.nodeType != Leaf or node.filter == nil or node.filter(vars)
-    node.lastMatchId += 1
-    node.matchIds[node.lastMatchId] = idAttrs
-    node.matches[idAttrs] = Match[T](id: node.lastMatchId, vars: vars, enabled: enabled)
+    var match =
+      if node.matches.hasKey(idAttrs):
+        node.matches[idAttrs]
+      else:
+        node.lastMatchId += 1
+        Match[T](id: node.lastMatchId)
+    match.vars = vars
+    match.enabled = node.nodeType != Leaf or node.filter == nil or node.filter(vars)
+    node.matchIds[match.id] = idAttrs
+    node.matches[idAttrs] = match
     if node.nodeType == Leaf and node.trigger and node.callback != nil:
       session.thenNodes[].incl(node.addr)
     node.parent.oldIdAttrs.incl(idAttr)
