@@ -578,7 +578,7 @@ test "join followed by non-join":
   check session.findAll(rules.rule1).len == 2
 
 test "only last condition can fire":
-  var didFire = false
+  var count = 0
   let rules =
     ruleset:
       rule rule1(Fact):
@@ -587,7 +587,7 @@ test "only last condition can fire":
           (id1, Color, color, then = false)
           (Alice, Height, height)
         then:
-          didFire = true
+          count += 1
 
   var session = initSession(Fact)
   for r in rules.fields:
@@ -597,7 +597,26 @@ test "only last condition can fire":
   session.insert(Alice, LeftOf, Bob)
   session.insert(Alice, Color, "blue")
 
-  check didFire
+  check count == 1
+
+  session.retract(Alice, Height)
+  session.retract(Alice, LeftOf)
+  session.retract(Alice, Color)
+
+  session.insert(Alice, Height, 60)
+  session.insert(Alice, LeftOf, Bob)
+  session.insert(Alice, Color, "blue")
+
+  check count == 2
+
+  session.insert(Alice, LeftOf, Bob)
+  session.insert(Alice, Color, "blue")
+
+  check count == 2
+
+  session.insert(Alice, Height, 60)
+
+  check count == 3
 
 # this one is not used...
 # it's just here to make sure we can define

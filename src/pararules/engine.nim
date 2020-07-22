@@ -65,6 +65,7 @@ type
     alphaNode: AlphaNode[T]
     condition: Condition[T]
     idName: string
+    oldIdAttrs: HashSet[IdAttr]
 
   # session
   Condition[T] = object
@@ -193,7 +194,19 @@ proc getIdAttr[T](fact: Fact[T]): IdAttr =
     attr = fact.attr.type1.ord
   (id, attr)
 
-proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], idAttrs: IdAttrs, vars: Vars[T], token: Token[T], fromAlpha: bool)
+proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], idAttrs: IdAttrs, vars: Vars[T], token: Token[T], isNew: bool)
+
+proc leftActivation[T](session: var Session[T], node: JoinNode[T], idAttrs: IdAttrs, vars: Vars[T], token: Token[T], alphaFact: Fact[T]) =
+  var newVars = vars
+  if getVarsFromFact(newVars, node.condition, alphaFact):
+    let idAttr = alphaFact.getIdAttr
+    var newIdAttrs = idAttrs
+    newIdAttrs.add(idAttr)
+    var newToken = token
+    newToken.fact = alphaFact
+    let isNew = not node.oldIdAttrs.contains(idAttr)
+    node.oldIdAttrs.incl(idAttr)
+    session.leftActivation(node.child, newIdAttrs, newVars, newToken, isNew)
 
 proc leftActivation[T](session: var Session[T], node: JoinNode[T], idAttrs: IdAttrs, vars: Vars[T], token: Token[T]) =
   # SHORTCUT: if we know the id, only loop over alpha facts with that id
@@ -201,28 +214,17 @@ proc leftActivation[T](session: var Session[T], node: JoinNode[T], idAttrs: IdAt
     let id = vars[node.idName].type0
     if node.alphaNode.facts.hasKey(id):
       for alphaFact in node.alphaNode.facts[id].values:
-        var newVars = vars
-        if getVarsFromFact(newVars, node.condition, alphaFact):
-          var newIdAttrs = idAttrs
-          newIdAttrs.add(alphaFact.getIdAttr)
-          var newToken = token
-          newToken.fact = alphaFact
-          session.leftActivation(node.child, newIdAttrs, newVars, newToken, false)
+        session.leftActivation(node, idAttrs, vars, token, alphaFact)
   else:
     for factsForId in node.alphaNode.facts.values:
       for alphaFact in factsForId.values:
-        var newVars = vars
-        if getVarsFromFact(newVars, node.condition, alphaFact):
-          var newIdAttrs = idAttrs
-          newIdAttrs.add(alphaFact.getIdAttr)
-          var newToken = token
-          newToken.fact = alphaFact
-          session.leftActivation(node.child, newIdAttrs, newVars, newToken, false)
+        session.leftActivation(node, idAttrs, vars, token, alphaFact)
 
-proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], idAttrs: IdAttrs, vars: Vars[T], token: Token[T], fromAlpha: bool) =
-  if fromAlpha and (token.kind == Insert or token.kind == Update) and node.condition.shouldTrigger:
+proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], idAttrs: IdAttrs, vars: Vars[T], token: Token[T], isNew: bool) =
+  # if the insert/update fact is new and this condition doesn't have then = false, let the leaf node trigger
+  if isNew and (token.kind == Insert or token.kind == Update) and node.condition.shouldTrigger:
     node.leafNode.trigger = true
-
+  # add or remove the match
   case token.kind:
   of Insert, Update:
     let enabled = node.nodeType != Leaf or node.filter == nil or node.filter(vars)
@@ -234,7 +236,8 @@ proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], idAttrs
   of Retract:
     node.matchIds.del(node.matches[idAttrs].id)
     node.matches.del(idAttrs)
-
+    node.parent.oldIdAttrs.excl(idAttrs[idAttrs.len-1])
+  # pass the token down the chain
   if node.nodeType != Leaf:
     session.leftActivation(node.child, idAttrs, vars, token)
 
