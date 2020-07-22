@@ -26,7 +26,6 @@ type
     id: int
     vars: Vars[T]
     enabled: bool
-    trigger: bool
 
   # functions
   CallbackFn[T] = proc (vars: Vars[T])
@@ -227,11 +226,10 @@ proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], idAttrs
   case token.kind:
   of Insert, Update:
     let enabled = node.nodeType != Leaf or node.filter == nil or node.filter(vars)
-    let trigger = node.nodeType == Leaf and node.trigger and enabled
     node.lastMatchId += 1
     node.matchIds[node.lastMatchId] = idAttrs
-    node.matches[idAttrs] = Match[T](id: node.lastMatchId, vars: vars, enabled: enabled, trigger: trigger)
-    if node.nodeType == Leaf and node.callback != nil and trigger:
+    node.matches[idAttrs] = Match[T](id: node.lastMatchId, vars: vars, enabled: enabled)
+    if node.nodeType == Leaf and node.trigger and node.callback != nil:
       session.thenNodes[].incl(node.addr)
   of Retract:
     node.matchIds.del(node.matches[idAttrs].id)
@@ -291,7 +289,7 @@ proc fireRules*[T](session: var Session[T]) =
   for node in thenNodes:
     node.trigger = false
     for match in node.matches.values:
-      if match.trigger:
+      if match.enabled:
         thenQueue.add((node: node[], vars: match.vars))
   # execute `then` blocks
   for (node, vars) in thenQueue:
