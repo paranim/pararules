@@ -205,7 +205,6 @@ proc leftActivation[T](session: var Session[T], node: JoinNode[T], idAttrs: IdAt
     var newToken = token
     newToken.fact = alphaFact
     let isNew = not node.oldIdAttrs.contains(idAttr)
-    node.oldIdAttrs.incl(idAttr)
     session.leftActivation(node.child, newIdAttrs, newVars, newToken, isNew)
 
 proc leftActivation[T](session: var Session[T], node: JoinNode[T], idAttrs: IdAttrs, vars: Vars[T], token: Token[T]) =
@@ -221,6 +220,7 @@ proc leftActivation[T](session: var Session[T], node: JoinNode[T], idAttrs: IdAt
         session.leftActivation(node, idAttrs, vars, token, alphaFact)
 
 proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], idAttrs: IdAttrs, vars: Vars[T], token: Token[T], isNew: bool) =
+  let idAttr = idAttrs[idAttrs.len-1]
   # if the insert/update fact is new and this condition doesn't have then = false, let the leaf node trigger
   if isNew and (token.kind == Insert or token.kind == Update) and node.condition.shouldTrigger:
     node.leafNode.trigger = true
@@ -233,10 +233,11 @@ proc leftActivation[T](session: var Session[T], node: var MemoryNode[T], idAttrs
     node.matches[idAttrs] = Match[T](id: node.lastMatchId, vars: vars, enabled: enabled)
     if node.nodeType == Leaf and node.trigger and node.callback != nil:
       session.thenNodes[].incl(node.addr)
+    node.parent.oldIdAttrs.incl(idAttr)
   of Retract:
     node.matchIds.del(node.matches[idAttrs].id)
     node.matches.del(idAttrs)
-    node.parent.oldIdAttrs.excl(idAttrs[idAttrs.len-1])
+    node.parent.oldIdAttrs.excl(idAttr)
   # pass the token down the chain
   if node.nodeType != Leaf:
     session.leftActivation(node.child, idAttrs, vars, token)
