@@ -577,6 +577,28 @@ test "join followed by non-join":
 
   check session.findAll(rules.rule1).len == 2
 
+test "only last condition can fire":
+  var didFire = false
+  let rules =
+    ruleset:
+      rule rule1(Fact):
+        what:
+          (id1, LeftOf, Bob, then = false)
+          (id1, Color, color, then = false)
+          (Alice, Height, height)
+        then:
+          didFire = true
+
+  var session = initSession(Fact)
+  for r in rules.fields:
+    session.add(r)
+
+  session.insert(Alice, Height, 60) # out of order
+  session.insert(Alice, LeftOf, Bob)
+  session.insert(Alice, Color, "blue")
+
+  check didFire
+
 # this one is not used...
 # it's just here to make sure we can define
 # multiple schemas in one module
