@@ -250,9 +250,9 @@ proc rightActivation[T](session: var Session[T], node: JoinNode[T], idAttr: IdAt
       if node.idName != "" and vars[node.idName].type0 != token.fact.id.type0:
         continue
       var newVars = vars # making a mutable copy here is far faster than making `vars` mutable above
-      var newIdAttrs = idAttrs
-      newIdAttrs.add(idAttr)
       if getVarsFromFact(newVars, node.condition, token.fact):
+        var newIdAttrs = idAttrs
+        newIdAttrs.add(idAttr)
         session.leftActivation(node.child, newIdAttrs, newVars, token, true)
 
 proc rightActivation[T](session: var Session[T], node: var AlphaNode[T], token: Token[T]) =
