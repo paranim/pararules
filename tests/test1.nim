@@ -518,10 +518,11 @@ test "join value with id":
 
   session.insert(Alice, Color, "blue")
   session.insert(Alice, Height, 60)
+  session.insert(Bob, LeftOf, Alice)
+
   session.insert(Charlie, Color, "green")
   session.insert(Charlie, Height, 72)
-
-  session.insert(Bob, LeftOf, Alice)
+  session.insert(Bob, LeftOf, Charlie)
 
   check session.findAll(rules.rule1).len == 1
 
