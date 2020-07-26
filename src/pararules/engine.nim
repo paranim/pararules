@@ -66,6 +66,7 @@ type
     condition: Condition[T]
     idName: string
     oldIdAttrs: HashSet[IdAttr]
+    disableFastUpdates: bool
 
   # session
   Condition[T] = object
@@ -134,6 +135,7 @@ proc isAncestor(x, y: JoinNode): bool =
 
 proc add*[T, U](session: Session[T], production: Production[T, U]) =
   var memNodes: seq[MemoryNode[T]]
+  var joinNodes: seq[JoinNode[T]]
   let last = production.conditions.len - 1
   var
     bindings: HashSet[string]
@@ -166,10 +168,17 @@ proc add*[T, U](session: Session[T], production: Production[T, U]) =
         raise newException(Exception, production.name & " already exists in session")
       session.leafNodes[production.name] = memNode
     memNodes.add(memNode)
+    joinNodes.add(joinNode)
     joinNode.child = memNode
   let leafMemNode = memNodes[memNodes.len - 1]
   for node in memNodes:
     node.leafNode = leafMemNode
+  for node in joinNodes:
+    # disable fast updates for facts whose value is part of a join
+    for v in node.condition.vars:
+      if v.field == Value and joinedBindings.contains(v.name):
+        node.disableFastUpdates = true
+        break
 
 proc getVarsFromFact[T](vars: var Vars[T], condition: Condition[T], fact: Fact[T]): bool =
   for v in condition.vars:
@@ -284,7 +293,11 @@ proc rightActivation[T](session: var Session[T], node: var AlphaNode[T], token: 
     assert node.facts[idAttr.id][idAttr.attr] == token.oldFact
     node.facts[idAttr.id][idAttr.attr] = token.fact
   for child in node.successors:
-    session.rightActivation(child, idAttr, token)
+    if token.kind == Update and child.disableFastUpdates:
+      session.rightActivation(child, idAttr, Token[T](fact: token.oldFact, kind: Retract))
+      session.rightActivation(child, idAttr, Token[T](fact: token.fact, kind: Insert))
+    else:
+      session.rightActivation(child, idAttr, token)
 
 proc fireRules*[T](session: var Session[T]) =
   # find all nodes with `then` blocks that need executed
