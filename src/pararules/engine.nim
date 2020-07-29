@@ -308,15 +308,15 @@ proc fireRules*[T](session: var Session[T]) =
     return
   session.thenNodes[].clear
   # collect all nodes/vars to be executed
-  var thenQueue: seq[(MemoryNode[T], Vars[T])]
+  var thenQueue: seq[(ptr MemoryNode[T], Vars[T])]
   for node in thenNodes:
     node.trigger = false
     for match in node.matches.values:
       if match.enabled:
-        thenQueue.add((node: node[], vars: match.vars))
+        thenQueue.add((node: node, vars: match.vars))
   # execute `then` blocks
   for (node, vars) in thenQueue:
-    node.callback(vars)
+    node[].callback(vars)
   # recur because there may be new `then` blocks to execute
   session.fireRules()
 
