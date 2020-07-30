@@ -119,37 +119,39 @@ proc parseWhat(name: string, dataType: NimNode, matchType: NimNode, attrs: Table
 
   let
     prod = genSym(nskVar, "prod")
-    v = genSym(nskParam, "v")
     callback = genSym(nskLet, "callback")
-    v2 = genSym(nskParam, "v")
     query = genSym(nskLet, "query")
-    v3 = genSym(nskParam, "v")
     filter = genSym(nskLet, "filter")
     session = ident("session")
 
-  var queryBody = newNimNode(nnkTupleConstr)
-  for (varName, varInfo) in vars.pairs:
-    let typeField = ident(typePrefix & $varInfo.typeNum)
-    queryBody.add(newNimNode(nnkExprColonExpr).add(ident(varName)).add(quote do: `v2`[`varName`].`typeField`))
-
-  let queryLet = quote do:
-    let `query` = proc (`v2`: `matchType`): `tupleType` =
-      `queryBody`
+  let queryLet =
+    block:
+      let v = genSym(nskParam, "v")
+      var queryBody = newNimNode(nnkTupleConstr)
+      for (varName, varInfo) in vars.pairs:
+        let typeField = ident(typePrefix & $varInfo.typeNum)
+        queryBody.add(newNimNode(nnkExprColonExpr).add(ident(varName)).add(quote do: `v`[`varName`].`typeField`))
+      quote do:
+        let `query` = proc (`v`: `matchType`): `tupleType` =
+          `queryBody`
 
   let filterLet =
-    if condBody != nil:
-      let usedVars = getUsedVars(vars, condNode)
-      let varNode = createVars(usedVars, v3)
-      quote do:
-        let `filter` = proc (`v3`: `matchType`): bool =
-          `varNode`
-          `condBody`
-    else:
-      quote do:
-        let `filter`: proc (`v3`: `matchType`): bool = nil
+    block:
+      let v = genSym(nskParam, "v")
+      if condBody != nil:
+        let usedVars = getUsedVars(vars, condNode)
+        let varNode = createVars(usedVars, v)
+        quote do:
+          let `filter` = proc (`v`: `matchType`): bool =
+            `varNode`
+            `condBody`
+      else:
+        quote do:
+          let `filter`: proc (`v`: `matchType`): bool = nil
 
   if thenNode != nil:
     let usedVars = getUsedVars(vars, thenNode)
+    let v = genSym(nskParam, "v")
     let varNode = createVars(usedVars, v)
     result = newStmtList(quote do:
       let `callback` = proc (`session`: var Session[`dataType`, `matchType`], `v`: `matchType`) =
