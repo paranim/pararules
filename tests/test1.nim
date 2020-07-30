@@ -1,6 +1,5 @@
 import unittest
 import pararules
-from pararules/engine import getParent
 import tables
 
 type

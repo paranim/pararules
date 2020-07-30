@@ -91,7 +91,7 @@ proc addCond(dataType: NimNode, vars: OrderedTable[string, VarInfo], prod: NimNo
   quote do:
     add(`prod`, `id`, `attr`, `value`, `extraArg`)
 
-proc parseWhat(name: string, dataType: NimNode, attrs: Table[string, int], types: seq[string], node: NimNode, condNode: NimNode, thenNode: NimNode): NimNode =
+proc parseWhat(name: string, dataType: NimNode, matchType: NimNode, attrs: Table[string, int], types: seq[string], node: NimNode, condNode: NimNode, thenNode: NimNode): NimNode =
   var vars: OrderedTable[string, VarInfo]
   for condNum in 0 ..< node.len:
     let child = node[condNum]
@@ -133,7 +133,7 @@ proc parseWhat(name: string, dataType: NimNode, attrs: Table[string, int], types
     queryBody.add(newNimNode(nnkExprColonExpr).add(ident(varName)).add(quote do: `v2`[`varName`].`typeField`))
 
   let queryLet = quote do:
-    let `query` = proc (`v2`: Table[string, `dataType`]): `tupleType` =
+    let `query` = proc (`v2`: `matchType`): `tupleType` =
       `queryBody`
 
   let filterLet =
@@ -141,30 +141,30 @@ proc parseWhat(name: string, dataType: NimNode, attrs: Table[string, int], types
       let usedVars = getUsedVars(vars, condNode)
       let varNode = createVars(usedVars, v3)
       quote do:
-        let `filter` = proc (`v3`: Table[string, `dataType`]): bool =
+        let `filter` = proc (`v3`: `matchType`): bool =
           `varNode`
           `condBody`
     else:
       quote do:
-        let `filter`: proc (`v3`: Table[string, `dataType`]): bool = nil
+        let `filter`: proc (`v3`: `matchType`): bool = nil
 
   if thenNode != nil:
     let usedVars = getUsedVars(vars, thenNode)
     let varNode = createVars(usedVars, v)
     result = newStmtList(quote do:
-      let `callback` = proc (`session`: var Session[`dataType`], `v`: Table[string, `dataType`]) =
+      let `callback` = proc (`session`: var Session[`dataType`, `matchType`], `v`: `matchType`) =
         `session`.insideRule = true
         `varNode`
         `thenNode`
       `queryLet`
       `filterLet`
-      var `prod` = initProduction[`dataType`, `tupleType`](`name`, `callback`, `query`, `filter`)
+      var `prod` = initProduction[`dataType`, `tupleType`, `matchType`](`name`, `callback`, `query`, `filter`)
     )
   else:
     result = newStmtList(quote do:
       `queryLet`
       `filterLet`
-      var `prod` = initProduction[`dataType`, `tupleType`](`name`, nil, `query`, `filter`)
+      var `prod` = initProduction[`dataType`, `tupleType`, `matchType`](`name`, nil, `query`, `filter`)
     )
 
   for condNum in 0 ..< node.len:
@@ -172,7 +172,7 @@ proc parseWhat(name: string, dataType: NimNode, attrs: Table[string, int], types
     result.add addCond(datatype, vars, prod, child)
   result.add prod
 
-macro ruleWithAttrs*(sig: untyped, attrsNode: typed, typesNode: typed, body: untyped): untyped =
+macro ruleWithAttrs*(sig: untyped, dataType: untyped, matchType: untyped, attrsNode: typed, typesNode: typed, body: untyped): untyped =
   expectKind(body, nnkStmtList)
   result = newStmtList()
   var t: Table[string, NimNode]
@@ -199,10 +199,10 @@ macro ruleWithAttrs*(sig: untyped, attrsNode: typed, typesNode: typed, body: unt
 
   expectKind(sig, nnkCall)
   let name = sig[0].strVal
-  let dataType = sig[1]
   result.add parseWhat(
     name,
     dataType,
+    matchType,
     attrs,
     types,
     t["what"],
@@ -213,10 +213,16 @@ macro ruleWithAttrs*(sig: untyped, attrsNode: typed, typesNode: typed, body: unt
 macro rule*(sig: untyped, body: untyped): untyped =
   expectKind(sig, nnkCall)
   let dataType = sig[1]
+  let matchType =
+    if sig.len > 2:
+      sig[2]
+    else:
+      quote do:
+        Vars[`dataType`]
   let attrToType = ident(attrToTypePrefix & dataType.strVal)
   let typeToName = ident(typeToNamePrefix & dataType.strVal)
   quote do:
-    ruleWithAttrs(`sig`, `attrToType`, `typeToName`, `body`)
+    ruleWithAttrs(`sig`, `dataType`, `matchType`, `attrToType`, `typeToName`, `body`)
 
 proc getRuleName(rule: NimNode): string =
   expectKind(rule, nnkCommand)
@@ -425,7 +431,7 @@ proc createUpdateProc(dataType: NimNode, intType: NimNode, attrType: NimNode, id
     checkProcId = ident(checkPrefix & dataType.strVal)
     initProc = ident(initPrefix & dataType.strVal)
     session = ident("session")
-    sessionType = newNimNode(nnkVarTy).add(newNimNode(nnkBracketExpr).add(bindSym("Session")).add(dataType))
+    sessionType = newNimNode(nnkVarTy).add(newNimNode(nnkBracketExpr).add(bindSym("Session")).add(dataType).add(ident("auto")))
     id = ident("id")
     attr = ident("attr")
     value = ident("value")
@@ -453,7 +459,7 @@ proc createRetractProc(dataType: NimNode, intType: NimNode, attrType: NimNode, i
     engineProcId = bindSym("retractFact")
     initProc = ident(initPrefix & dataType.strVal)
     session = ident("session")
-    sessionType = newNimNode(nnkVarTy).add(newNimNode(nnkBracketExpr).add(bindSym("Session")).add(dataType))
+    sessionType = newNimNode(nnkVarTy).add(newNimNode(nnkBracketExpr).add(bindSym("Session")).add(dataType).add(ident("auto")))
     id = ident("id")
     attr = ident("attr")
     body = quote do:
@@ -549,9 +555,15 @@ use `Strings` in the schema.
 # these wrapper macros are only here so
 # the engine doesn't need to be imported directly
 
-macro initSession*(dataType: type, autoFire: bool = true): untyped =
+macro initSession*(dataType: type, matchType: type = nil, autoFire: bool = true): untyped =
+  let matchT =
+    if matchType != nil:
+      matchType
+    else:
+      quote do:
+        Vars[`dataType`]
   quote do:
-    initSession[`dataType`](`autoFire`)
+    initSession[`dataType`, `matchT`](`autoFire`)
 
 macro fireRules*(session: Session) =
   quote do:
