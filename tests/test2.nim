@@ -307,13 +307,16 @@ test "tips":
 
 type
   RulesKind = enum
-    RulesGetPlayer
+    RulesGetPlayer, RulesGetKeys
   MaybeFact = tuple[fact: Fact, isSet: bool]
   GetPlayer = tuple[x: MaybeFact, y: MaybeFact]
+  GetKeys = tuple[keys: MaybeFact]
   Rules = object
     case kind: RulesKind
     of RulesGetPlayer:
       getPlayer: GetPlayer
+    of RulesGetKeys:
+      getKeys: GetKeys
 
 proc `[]`(t: Rules, key: string): Fact =
   case t.kind:
@@ -321,6 +324,10 @@ proc `[]`(t: Rules, key: string): Fact =
       case key:
         of "x": return t.getPlayer.x.fact
         of "y": return t.getPlayer.y.fact
+        else: raise newException(Exception, "Key not found: " & key)
+    of RulesGetKeys:
+      case key:
+        of "keys": return t.getKeys.keys.fact
         else: raise newException(Exception, "Key not found: " & key)
 
 proc hasKey(t: Rules, key: string): bool =
@@ -330,6 +337,10 @@ proc hasKey(t: Rules, key: string): bool =
         of "x": t.getPlayer.x.isSet
         of "y": t.getPlayer.y.isSet
         else: false
+    of RulesGetKeys:
+      case key:
+        of "keys": return t.getKeys.keys.isSet
+        else: false
 
 proc `[]=`(t: var Rules, key: string, val: Fact) =
   case t.kind:
@@ -338,15 +349,45 @@ proc `[]=`(t: var Rules, key: string, val: Fact) =
         of "x": t.getPlayer.x = (val, true)
         of "y": t.getPlayer.y = (val, true)
         else: raise newException(Exception, "Can't set key: " & key)
+    of RulesGetKeys:
+      case key:
+        of "keys": t.getKeys.keys = (val, true)
+        else: raise newException(Exception, "Key not found: " & key)
 
 test "custom match type":
-  var session = initSession(Fact, Rules)
-  let rule1 =
-    rule getPlayer(Fact, Rules):
+  #[
+  var (session, rules) = initSessionWithRules(Fact):
+    rule getPlayer(Fact):
       what:
         (Player, X, x)
         (Player, Y, y)
-  session.add(rule1)
   session.insert(Player, X, 0.0)
   session.insert(Player, Y, 1.0)
-  check session.findAll(rule1).len == 1
+  check session.findAll(rules.getPlayer).len == 1
+  ]#
+  var session = initSession(Fact, Rules)
+  session.initMatch = proc (ruleName: string): Rules =
+    case ruleName:
+      of "getPlayer":
+        Rules(kind: RulesGetPlayer)
+      of "getKeys":
+        Rules(kind: RulesGetKeys)
+      else:
+        raise newException(Exception, "Invalid rule: " & ruleName)
+  let rules =
+    ruleset:
+      rule getPlayer(Fact, Rules):
+        what:
+          (Player, X, x)
+          (Player, Y, y)
+      rule getKeys(Fact, Rules):
+        what:
+          (Global, PressedKeys, keys)
+  for r in rules.fields:
+    session.add(r)
+  session.insert(Player, X, 0.0)
+  session.insert(Player, Y, 1.0)
+  var keys = initHashSet[int]()
+  keys.incl(262)
+  session.insert(Global, PressedKeys, keys)
+  check session.findAll(rules.getPlayer).len == 1

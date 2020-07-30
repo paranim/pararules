@@ -32,6 +32,7 @@ type
   SessionCallbackFn[T, MatchT] = proc (session: var Session[T, MatchT], vars: MatchT)
   QueryFn[MatchT, U] = proc (vars: MatchT): U
   FilterFn[MatchT] = proc (vars: MatchT): bool
+  InitMatchFn[MatchT] = proc (ruleName: string): MatchT
 
   # alpha network
   AlphaNode[T, MatchT] = ref object
@@ -67,6 +68,7 @@ type
     idName: string
     oldIdAttrs: HashSet[IdAttr]
     disableFastUpdates: bool
+    ruleName: string
 
   # session
   Condition[T, MatchT] = object
@@ -86,6 +88,7 @@ type
     insideRule*: bool
     thenNodes: ref HashSet[ptr MemoryNode[T, MatchT]]
     autoFire: bool
+    initMatch*: InitMatchFn[MatchT]
 
 proc addNode(node: AlphaNode, newNode: AlphaNode): AlphaNode =
   for child in node.children:
@@ -141,7 +144,7 @@ proc add*[T, U, MatchT](session: Session[T, MatchT], production: Production[T, U
     var condition = production.conditions[i]
     var leafAlphaNode = session.addNodes(condition.nodes)
     let parentMemNode = if memNodes.len > 0: memNodes[memNodes.len - 1] else: nil
-    var joinNode = JoinNode[T, MatchT](parent: parentMemNode, alphaNode: leafAlphaNode, condition: condition)
+    var joinNode = JoinNode[T, MatchT](parent: parentMemNode, alphaNode: leafAlphaNode, condition: condition, ruleName: production.name)
     for v in condition.vars:
       if bindings.contains(v.name):
         joinedBindings.incl(v.name)
@@ -258,7 +261,7 @@ proc leftActivation[T, MatchT](session: var Session[T, MatchT], node: var Memory
 
 proc rightActivation[T, MatchT](session: var Session[T, MatchT], node: JoinNode[T, MatchT], idAttr: IdAttr, token: Token[T]) =
   if node.parent == nil: # root node
-    var vars = MatchT()
+    var vars = session.initMatch(node.ruleName)
     if getVarsFromFact(vars, node.condition, token.fact):
       session.leftActivation(node.child, @[idAttr], vars, token, true)
   else:
@@ -381,13 +384,17 @@ proc retractFact*[T, MatchT](session: var Session[T, MatchT], id: T, attr: T) =
     let fact = node.facts[id][attr]
     session.rightActivation(node[], Token[T](fact: fact, kind: Retract))
 
-proc initSession*[T, MatchT](autoFire: bool = true): Session[T, MatchT] =
+proc defaultInitMatch[MatchT](ruleName: string): MatchT =
+  MatchT()
+
+proc initSession*[T, MatchT](autoFire: bool = true, initMatch: InitMatchFn[MatchT] = defaultInitMatch): Session[T, MatchT] =
   result.alphaNode = new(AlphaNode[T, MatchT])
   result.leafNodes = newTable[string, MemoryNode[T, MatchT]]()
   result.idAttrNodes = newTable[IdAttr, HashSet[ptr AlphaNode[T, MatchT]]]()
   new result.thenNodes
   result.thenNodes[] = initHashSet[ptr MemoryNode[T, MatchT]]()
   result.autoFire = autoFire
+  result.initMatch = initMatch
 
 proc initProduction*[T, U, MatchT](name: string, cb: SessionCallbackFn[T, MatchT], query: QueryFn[MatchT, U], filter: FilterFn[MatchT]): Production[T, U, MatchT] =
   result.name = name
