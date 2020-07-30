@@ -1,6 +1,6 @@
 import unittest
 import pararules
-import tables
+import tables, sets
 
 type
   Id* = enum

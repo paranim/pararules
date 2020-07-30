@@ -302,3 +302,51 @@ test "tips":
   session.insert(Player, Y, 0f)
 
   check session.findAll(rule1).len == 1
+
+# custom match type
+
+type
+  RulesKind = enum
+    RulesGetPlayer
+  MaybeFact = tuple[fact: Fact, isSet: bool]
+  GetPlayer = tuple[x: MaybeFact, y: MaybeFact]
+  Rules = object
+    case kind: RulesKind
+    of RulesGetPlayer:
+      getPlayer: GetPlayer
+
+proc `[]`(t: Rules, key: string): Fact =
+  case t.kind:
+    of RulesGetPlayer:
+      case key:
+        of "x": return t.getPlayer.x.fact
+        of "y": return t.getPlayer.y.fact
+        else: raise newException(Exception, "Key not found: " & key)
+
+proc hasKey(t: Rules, key: string): bool =
+  case t.kind:
+    of RulesGetPlayer:
+      case key:
+        of "x": t.getPlayer.x.isSet
+        of "y": t.getPlayer.y.isSet
+        else: false
+
+proc `[]=`(t: var Rules, key: string, val: Fact) =
+  case t.kind:
+    of RulesGetPlayer:
+      case key:
+        of "x": t.getPlayer.x = (val, true)
+        of "y": t.getPlayer.y = (val, true)
+        else: raise newException(Exception, "Can't set key: " & key)
+
+test "custom match type":
+  var session = initSession(Fact, Rules)
+  let rule1 =
+    rule getPlayer(Fact, Rules):
+      what:
+        (Player, X, x)
+        (Player, Y, y)
+  session.add(rule1)
+  session.insert(Player, X, 0.0)
+  session.insert(Player, Y, 1.0)
+  check session.findAll(rule1).len == 1
