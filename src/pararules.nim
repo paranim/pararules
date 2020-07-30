@@ -12,6 +12,8 @@ const
   attrTypeNum = 1
   idTypeNum = 2
 
+## rule, ruleset
+
 type
   VarInfo = tuple[condNum: int, typeNum: int]
 
@@ -241,6 +243,8 @@ macro ruleset*(rules: untyped): untyped =
     let name = r.getRuleName
     result.add(newNimNode(nnkExprColonExpr).add(ident(name)).add(r))
 
+## find, findAll, query
+
 proc getDataType(prod: NimNode): NimNode =
   let impl = prod.getTypeImpl
   expectKind(impl, nnkObjectTy)
@@ -292,6 +296,8 @@ macro query*(session: Session, prod: Production, args: varargs[untyped]): untype
   else:
     quote do:
       get(`session`, `prod`, findIndex(`session`, `prod`))
+
+## schema
 
 proc createBranch(dataType: NimNode, index: int, typ: NimNode): NimNode =
   result = newNimNode(nnkOfBranch)
@@ -554,8 +560,8 @@ use `Strings` in the schema.
     createConstants(dataType, types, attrs)
   )
 
-# these wrapper macros are only here so
-# the engine doesn't need to be imported directly
+## wrapper macros
+## these are only here so the engine doesn't need to be imported directly
 
 macro initSession*(dataType: type, matchType: type = nil, autoFire: bool = true): untyped =
   let matchT =
