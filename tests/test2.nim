@@ -355,17 +355,15 @@ proc `[]=`(t: var Rules, key: string, val: Fact) =
         else: raise newException(Exception, "Key not found: " & key)
 
 test "custom match type":
-  #[
-  var (session, rules) = initSessionWithRules(Fact):
-    rule getPlayer(Fact):
-      what:
-        (Player, X, x)
-        (Player, Y, y)
-  session.insert(Player, X, 0.0)
-  session.insert(Player, Y, 1.0)
-  check session.findAll(rules.getPlayer).len == 1
-  ]#
-  var session = initSession(Fact, Rules)
+  var (session, rules) =
+    initSessionWithRules(Fact, Rules):
+      rule getPlayer(Fact, Rules):
+        what:
+          (Player, X, x)
+          (Player, Y, y)
+      rule getKeys(Fact, Rules):
+        what:
+          (Global, PressedKeys, keys)
   session.initMatch = proc (ruleName: string): Rules =
     case ruleName:
       of "getPlayer":
@@ -374,17 +372,6 @@ test "custom match type":
         Rules(kind: RulesGetKeys)
       else:
         raise newException(Exception, "Invalid rule: " & ruleName)
-  let rules =
-    ruleset:
-      rule getPlayer(Fact, Rules):
-        what:
-          (Player, X, x)
-          (Player, Y, y)
-      rule getKeys(Fact, Rules):
-        what:
-          (Global, PressedKeys, keys)
-  for r in rules.fields:
-    session.add(r)
   session.insert(Player, X, 0.0)
   session.insert(Player, Y, 1.0)
   var keys = initHashSet[int]()

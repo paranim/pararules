@@ -560,18 +560,28 @@ use `Strings` in the schema.
     createConstants(dataType, types, attrs)
   )
 
+## initSessionWithRules
+
+macro initSessionWithRules*(dataType: type, matchType: type, rules: untyped): untyped =
+  expectKind(rules, nnkStmtList)
+  var tup = newNimNode(nnkTupleConstr)
+  for r in rules:
+    let name = r.getRuleName
+    tup.add(newNimNode(nnkExprColonExpr).add(ident(name)).add(r))
+  quote do:
+    block:
+      let rules = `tup`
+      var session = initSession[`dataType`, `matchType`](autoFire = false)
+      for r in rules.fields:
+        session.add(r)
+      (session, rules)
+
 ## wrapper macros
 ## these are only here so the engine doesn't need to be imported directly
 
-macro initSession*(dataType: type, matchType: type = nil, autoFire: bool = true): untyped =
-  let matchT =
-    if matchType != nil:
-      matchType
-    else:
-      quote do:
-        Vars[`dataType`]
+macro initSession*(dataType: type, autoFire: bool = true): untyped =
   quote do:
-    initSession[`dataType`, `matchT`](`autoFire`)
+    initSession[`dataType`, Vars[`dataType`]](`autoFire`)
 
 macro fireRules*(session: Session) =
   quote do:
