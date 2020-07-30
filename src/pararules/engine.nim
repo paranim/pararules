@@ -87,9 +87,6 @@ type
     thenNodes: ref HashSet[ptr MemoryNode[T, MatchT]]
     autoFire: bool
 
-proc getParent*(node: MemoryNode): MemoryNode =
-  node.parent.parent
-
 proc addNode(node: AlphaNode, newNode: AlphaNode): AlphaNode =
   for child in node.children:
     if child.testField == newNode.testField and child.testValue == newNode.testValue:
@@ -180,21 +177,23 @@ proc add*[T, U, MatchT](session: Session[T, MatchT], production: Production[T, U
         node.disableFastUpdates = true
         break
 
+proc getVarFromFact[T, MatchT](vars: var MatchT, key: string, fact: T): bool =
+  if vars.hasKey(key) and vars[key] != fact:
+    return false
+  vars[key] = fact
+  true
+
 proc getVarsFromFact[T, MatchT](vars: var MatchT, condition: Condition[T, MatchT], fact: Fact[T]): bool =
   for v in condition.vars:
     case v.field:
       of Identifier:
-        if vars.hasKey(v.name) and vars[v.name].type0 != fact[0].type0:
+        if not getVarFromFact(vars, v.name, fact[0]):
           return false
-        else:
-          vars[v.name] = fact[0]
       of Attribute:
         raise newException(Exception, "Attributes can not contain vars: " & $v)
       of Value:
-        if vars.hasKey(v.name) and vars[v.name] != fact[2]:
+        if not getVarFromFact(vars, v.name, fact[2]):
           return false
-        else:
-          vars[v.name] = fact[2]
   true
 
 proc getIdAttr[T](fact: Fact[T]): IdAttr =
