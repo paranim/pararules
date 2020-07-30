@@ -236,12 +236,15 @@ proc getRuleName(rule: NimNode): string =
   expectKind(id, nnkIdent)
   id.strVal
 
-macro ruleset*(rules: untyped): untyped =
+proc makeTupleOfRules(rules: NimNode): NimNode =
   expectKind(rules, nnkStmtList)
   result = newNimNode(nnkTupleConstr)
   for r in rules:
     let name = r.getRuleName
     result.add(newNimNode(nnkExprColonExpr).add(ident(name)).add(r))
+
+macro ruleset*(rules: untyped): untyped =
+  makeTupleOfRules(rules)
 
 ## find, findAll, query
 
@@ -564,13 +567,10 @@ use `Strings` in the schema.
 
 macro initSessionWithRules*(dataType: type, matchType: type, rules: untyped): untyped =
   expectKind(rules, nnkStmtList)
-  var tup = newNimNode(nnkTupleConstr)
-  for r in rules:
-    let name = r.getRuleName
-    tup.add(newNimNode(nnkExprColonExpr).add(ident(name)).add(r))
+  var rules = makeTupleOfRules(rules)
   quote do:
     block:
-      let rules = `tup`
+      let rules = `rules`
       var session = initSession[`dataType`, `matchType`](autoFire = false)
       for r in rules.fields:
         session.add(r)
