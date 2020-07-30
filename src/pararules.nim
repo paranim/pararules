@@ -264,8 +264,8 @@ proc createParamsArray(dataType: NimNode, args: NimNode): NimNode =
     result.add(newNimNode(nnkExprColonExpr).add(name).add(quote do: `initProc`(`val`)))
 
 macro find*(session: Session, prod: Production, args: varargs[untyped]): untyped =
-  let dataType = prod.getDataType
   if args.len > 0:
+    let dataType = prod.getDataType
     let params = createParamsArray(dataType, args)
     quote do:
       findIndex(`session`, `prod`, `params`)
@@ -274,8 +274,8 @@ macro find*(session: Session, prod: Production, args: varargs[untyped]): untyped
       findIndex(`session`, `prod`)
 
 macro findAll*(session: Session, prod: Production, args: varargs[untyped]): untyped =
-  let dataType = prod.getDataType
   if args.len > 0:
+    let dataType = prod.getDataType
     let params = createParamsArray(dataType, args)
     quote do:
       findAllIndices(`session`, `prod`, `params`)
@@ -284,8 +284,8 @@ macro findAll*(session: Session, prod: Production, args: varargs[untyped]): unty
       findAllIndices(`session`, `prod`)
 
 macro query*(session: Session, prod: Production, args: varargs[untyped]): untyped =
-  let dataType = prod.getDataType
   if args.len > 0:
+    let dataType = prod.getDataType
     let params = createParamsArray(dataType, args)
     quote do:
       get(`session`, `prod`, findIndex(`session`, `prod`, `params`))
