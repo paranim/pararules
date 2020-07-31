@@ -2,8 +2,6 @@ Pararules is the first RETE-based rules engine made for games. It may also be th
 
 Rules engines have been around since the 70s, and the RETE algorithm has been used for almost that long. For some reason, they haven't found their way into games yet. With pararules, you can store the entire state of your game and express the logic as a simple series of rules.
 
-**Pararules is very new and is not fast or stable enough for serious games.**
-
 You can see it in action in the [parakeet](https://github.com/paranim/parakeet) example game and the other [paranim examples](https://github.com/paranim/paranim_examples).
 
 ## Start with the data
@@ -412,6 +410,52 @@ session.add:
       (`playerId`, X, x)
       (`playerId`, Y, y)
 ```
+
+## Firing rules manually
+
+By default, rules are fired after every `insert` call. This can be inefficient; you should normally only fire the rules once per frame. You can disable this when creating your session:
+
+```nim
+var session = initSession(Fact, autoFire = false)
+```
+
+Then, you need to explicitly fire the rules:
+
+```nim
+session.insert(Global, DeltaTime, game.deltaTime)
+session.insert(Global, TotalTime, game.totalTime)
+session.fireRules()
+```
+
+## Performance
+
+It is possible to create the session and rules in a single command:
+
+```nim
+var (session, rules) =
+  initSessionWithRules(Fact, autoFire = false):
+    rule getPlayer(Fact):
+      what:
+        (Player, X, x)
+        (Player, Y, y)
+    rule movePlayer(Fact):
+      what:
+        (Global, DeltaTime, dt)
+        (Global, PressedKeys, keys, then = false)
+        (Player, X, x, then = false)
+      then:
+        if keys.contains(263): # left arrow
+          session.insert(Player, X, x - 1.0)
+        elif keys.contains(262): # right arrow
+          session.insert(Player, X, x + 1.0)
+```
+
+This is not merely a convenience; there is a significant internal difference going on. Since `initSessionWithRules` knows all of its rules at compile time, it is able to generate a special type to store the matches. Normally, matches are stored in tables, which are significantly slower.
+
+There are a few downsides:
+
+1. `initSessionWithRules` must be called at the top level of your module, not inside a procedure, because it is generating types and procedures.
+2. You will not be able to `add` new rules to the session afterwards, because it must know all of its rules at compile time.
 
 ## Wrap up
 

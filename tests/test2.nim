@@ -322,7 +322,7 @@ var (session, rules) =
         elif keys.contains(262): # right arrow
           session.insert(Player, X, x + 1.0)
 
-test "custom match type":
+test "performance":
   session.insert(Player, X, 0.0)
   session.insert(Player, Y, 1.0)
   session.insert(Global, DeltaTime, 100.0)
