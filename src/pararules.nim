@@ -573,23 +573,23 @@ use `Strings` in the schema.
 
 const rulesTypeSuffix = "Rules"
 
-proc createTypesForSession(rulesName: string, enumName: string, rules: NimNode, tupleTypes: OrderedTable[string, NimNode]): NimNode =
-  var
+proc createTypesForSession(
+    rulesName: string,
+    enumName: string,
+    rules: NimNode,
+    ruleNameToTupleType: OrderedTable[string, NimNode],
     ruleNameToEnumItem: OrderedTable[string, NimNode]
-    enumItems: seq[NimNode]
-  for r in rules:
-    let
-      name = r.getRuleName
-      enumItem = ident(rulesName & name)
-    ruleNameToEnumItem[name] = enumItem
-    enumItems.add(enumItem)
+  ): NimNode =
+  var enumItems: seq[NimNode]
+  for item in ruleNameToEnumItem.values:
+    enumItems.add(item)
   let
     enumIdent = ident(enumName)
     enumType = createEnum(postfix(enumIdent, "*"), enumItems)
   var cases = newNimNode(nnkRecCase)
   cases.add(newIdentDefs(postfix(ident("kind"), "*"), enumIdent))
   for (ruleName, enumItem) in ruleNameToEnumItem.pairs:
-    cases.add(createBranch(enumItem, ident(ruleName), tupleTypes[ruleName]))
+    cases.add(createBranch(enumItem, ident(ruleName), ruleNameToTupleType[ruleName]))
   result = newNimNode(nnkTypeSection)
   result.add(enumType)
   result.add(newNimNode(nnkTypeDef).add(
@@ -618,23 +618,67 @@ proc getVarsFromRule(body: NimNode): seq[string] =
           result.add(s)
 
 proc createTupleType(dataType: NimNode, vars: seq[string]): NimNode =
+  var maybeType = newNimNode(nnkTupleTy)
+  maybeType.add(newIdentDefs(ident("fact"), dataType))
+  maybeType.add(newIdentDefs(ident("isSet"), ident("bool")))
   result = newNimNode(nnkTupleTy)
   for varName in vars:
-    result.add(newIdentDefs(ident(varName), dataType))
+    result.add(newIdentDefs(ident(varName), maybeType))
+
+proc createGetterProc(
+    dataType: NimNode,
+    rulesType: NimNode,
+    ruleNameToTupleType: OrderedTable[string, NimNode],
+    ruleNameToEnumItem: OrderedTable[string, NimNode]
+  ): NimNode =
+  let
+    procId = ident("[]")
+    rules = ident("rules")
+    key = ident("key")
+    ## FIXME: temporary hack
+    body = quote do:
+      case `rules`.kind:
+        of FactRulesGetPlayer:
+          case `key`:
+            of "x": return `rules`.getPlayer.x.fact
+            of "y": return `rules`.getPlayer.y.fact
+            else: raise newException(Exception, "Key not found: " & `key`)
+        of FactRulesGetKeys:
+          case `key`:
+            of "keys": return `rules`.getKeys.keys.fact
+            else: raise newException(Exception, "Key not found: " & `key`)
+
+  newProc(
+    name = postfix(procId, "*"),
+    params = [
+      dataType,
+      newIdentDefs(rules, rulesType),
+      newIdentDefs(key, ident("string"))
+    ],
+    body = newStmtList(body)
+  )
 
 macro initSessionWithRules*(dataType: type, matchType: untyped, rules: untyped): untyped =
   var tup = makeTupleOfRules(rules)
-  var tupleTypes: OrderedTable[string, NimNode]
+  var
+    ruleNameToTupleType: OrderedTable[string, NimNode]
+    ruleNameToEnumItem: OrderedTable[string, NimNode]
+  let rulesName = dataType.strVal & rulesTypeSuffix
   for rule in rules:
-    let ruleName = rule.getRuleName
-    let vars = getVarsFromRule(rule[2])
-    tupleTypes[ruleName] = createTupleType(dataType, vars)
+    let
+      name = rule.getRuleName
+      enumItem = ident(rulesName & name)
+      vars = getVarsFromRule(rule[2])
+    ruleNameToTupleType[name] = createTupleType(dataType, vars)
+    ruleNameToEnumItem[name] = enumItem
   let
-    rulesName = dataType.strVal & rulesTypeSuffix
     enumName = rulesName & enumSuffix
-    typeNode = createTypesForSession(rulesName, enumName, rules, tupleTypes)
+    typeNode = createTypesForSession(rulesName, enumName, rules, ruleNameToTupleType, ruleNameToEnumItem)
+    rulesIdent = ident(rulesName)
+    getterProc = createGetterProc(dataType, rulesIdent, ruleNameToTupleType, ruleNameToEnumItem)
   quote do:
     `typeNode`
+    `getterProc`
     block:
       let rules = `tup`
       var session = initSession[`dataType`, `matchType`](autoFire = false)

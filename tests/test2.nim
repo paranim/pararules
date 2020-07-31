@@ -315,18 +315,6 @@ var (session, rules) =
       what:
         (Global, PressedKeys, keys)
 
-proc `[]`(t: FactRules, key: string): Fact =
-  case t.kind:
-    of FactRulesGetPlayer:
-      case key:
-        of "x": return t.getPlayer.x.fact
-        of "y": return t.getPlayer.y.fact
-        else: raise newException(Exception, "Key not found: " & key)
-    of FactRulesGetKeys:
-      case key:
-        of "keys": return t.getKeys.keys.fact
-        else: raise newException(Exception, "Key not found: " & key)
-
 proc hasKey(t: FactRules, key: string): bool =
   case t.kind:
     of FactRulesGetPlayer:
@@ -350,16 +338,16 @@ proc `[]=`(t: var FactRules, key: string, val: Fact) =
       case key:
         of "keys": t.getKeys.keys = (val, true)
         else: raise newException(Exception, "Key not found: " & key)
-  session.initMatch = proc (ruleName: string): Rules =
-    case ruleName:
-      of "getPlayer":
-        Rules(kind: RulesGetPlayer)
-      of "getKeys":
-        Rules(kind: RulesGetKeys)
-      else:
-        raise newException(Exception, "Invalid rule: " & ruleName)
 
 test "custom match type":
+  session.initMatch = proc (ruleName: string): FactRules =
+    case ruleName:
+      of "getPlayer":
+        FactRules(kind: FactRulesGetPlayer)
+      of "getKeys":
+        FactRules(kind: FactRulesGetKeys)
+      else:
+        raise newException(Exception, "Invalid rule: " & ruleName)
   session.insert(Player, X, 0.0)
   session.insert(Player, Y, 1.0)
   var keys = initHashSet[int]()
