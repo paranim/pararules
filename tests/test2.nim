@@ -305,65 +305,51 @@ test "tips":
 
 # custom match type
 
-type
-  RulesKind = enum
-    RulesGetPlayer, RulesGetKeys
-  MaybeFact = tuple[fact: Fact, isSet: bool]
-  GetPlayer = tuple[x: MaybeFact, y: MaybeFact]
-  GetKeys = tuple[keys: MaybeFact]
-  Rules = object
-    case kind: RulesKind
-    of RulesGetPlayer:
-      getPlayer: GetPlayer
-    of RulesGetKeys:
-      getKeys: GetKeys
+var (session, rules) =
+  initSessionWithRules(Fact, FactRules):
+    rule getPlayer(Fact, FactRules):
+      what:
+        (Player, X, x)
+        (Player, Y, y)
+    rule getKeys(Fact, FactRules):
+      what:
+        (Global, PressedKeys, keys)
 
-proc `[]`(t: Rules, key: string): Fact =
+proc `[]`(t: FactRules, key: string): Fact =
   case t.kind:
-    of RulesGetPlayer:
+    of FactRulesGetPlayer:
       case key:
         of "x": return t.getPlayer.x.fact
         of "y": return t.getPlayer.y.fact
         else: raise newException(Exception, "Key not found: " & key)
-    of RulesGetKeys:
+    of FactRulesGetKeys:
       case key:
         of "keys": return t.getKeys.keys.fact
         else: raise newException(Exception, "Key not found: " & key)
 
-proc hasKey(t: Rules, key: string): bool =
+proc hasKey(t: FactRules, key: string): bool =
   case t.kind:
-    of RulesGetPlayer:
+    of FactRulesGetPlayer:
       case key:
         of "x": t.getPlayer.x.isSet
         of "y": t.getPlayer.y.isSet
         else: false
-    of RulesGetKeys:
+    of FactRulesGetKeys:
       case key:
         of "keys": return t.getKeys.keys.isSet
         else: false
 
-proc `[]=`(t: var Rules, key: string, val: Fact) =
+proc `[]=`(t: var FactRules, key: string, val: Fact) =
   case t.kind:
-    of RulesGetPlayer:
+    of FactRulesGetPlayer:
       case key:
         of "x": t.getPlayer.x = (val, true)
         of "y": t.getPlayer.y = (val, true)
         else: raise newException(Exception, "Can't set key: " & key)
-    of RulesGetKeys:
+    of FactRulesGetKeys:
       case key:
         of "keys": t.getKeys.keys = (val, true)
         else: raise newException(Exception, "Key not found: " & key)
-
-test "custom match type":
-  var (session, rules) =
-    initSessionWithRules(Fact, Rules):
-      rule getPlayer(Fact, Rules):
-        what:
-          (Player, X, x)
-          (Player, Y, y)
-      rule getKeys(Fact, Rules):
-        what:
-          (Global, PressedKeys, keys)
   session.initMatch = proc (ruleName: string): Rules =
     case ruleName:
       of "getPlayer":
@@ -372,6 +358,8 @@ test "custom match type":
         Rules(kind: RulesGetKeys)
       else:
         raise newException(Exception, "Invalid rule: " & ruleName)
+
+test "custom match type":
   session.insert(Player, X, 0.0)
   session.insert(Player, Y, 1.0)
   var keys = initHashSet[int]()

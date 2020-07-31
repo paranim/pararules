@@ -302,29 +302,35 @@ macro query*(session: Session, prod: Production, args: varargs[untyped]): untype
 
 ## schema
 
-proc createBranch(dataType: NimNode, index: int, typ: NimNode): NimNode =
+proc createBranch(enumItemName: NimNode, fieldName: NimNode, typ: NimNode): NimNode =
   result = newNimNode(nnkOfBranch)
   var list = newNimNode(nnkRecList)
-  let field = postfix(ident(typePrefix & $index), "*")
+  let field = postfix(fieldName, "*")
   list.add(newIdentDefs(field, typ))
-  result.add(ident(dataType.strVal & typeEnumPrefix & $index), list)
+  result.add(enumItemName, list)
 
-proc createEnum(name: NimNode, dataType: NimNode, types: seq[NimNode]): NimNode =
+proc createEnum(name: NimNode, enumItems: seq[NimNode]): NimNode =
   result = newNimNode(nnkTypeDef).add(
     newNimNode(nnkPragmaExpr).add(name).add(
       newNimNode(nnkPragma).add(ident("pure"))),
     newEmptyNode())
   var choices = newNimNode(nnkEnumTy).add(newEmptyNode())
-  for i in 0 ..< types.len:
-    choices.add(ident(dataType.strVal & typeEnumPrefix & $i))
+  for item in enumItems:
+    choices.add(item)
   result.add(choices)
 
 proc createTypes(dataType: NimNode, enumName: NimNode, types: seq[NimNode]): NimNode =
-  let enumType = createEnum(postfix(enumName, "*"), dataType, types)
+  var enumItems: seq[NimNode]
+  for i in 0 ..< types.len:
+    enumItems.add(ident(dataType.strVal & typeEnumPrefix & $i))
+  let enumType = createEnum(postfix(enumName, "*"), enumItems)
   var cases = newNimNode(nnkRecCase)
   cases.add(newIdentDefs(postfix(ident("kind"), "*"), enumName))
   for i in 0 ..< types.len:
-    cases.add(createBranch(dataType, i, types[i]))
+    let
+      enumItemName = ident(dataType.strVal & typeEnumPrefix & $i)
+      fieldName = ident(typePrefix & $i)
+    cases.add(createBranch(enumItemName, fieldName, types[i]))
 
   result = newNimNode(nnkTypeSection)
   result.add(enumType)
@@ -565,12 +571,72 @@ use `Strings` in the schema.
 
 ## initSessionWithRules
 
-macro initSessionWithRules*(dataType: type, matchType: type, rules: untyped): untyped =
-  expectKind(rules, nnkStmtList)
-  var rules = makeTupleOfRules(rules)
+const rulesTypeSuffix = "Rules"
+
+proc createTypesForSession(rulesName: string, enumName: string, rules: NimNode, tupleTypes: OrderedTable[string, NimNode]): NimNode =
+  var
+    ruleNameToEnumItem: OrderedTable[string, NimNode]
+    enumItems: seq[NimNode]
+  for r in rules:
+    let
+      name = r.getRuleName
+      enumItem = ident(rulesName & name)
+    ruleNameToEnumItem[name] = enumItem
+    enumItems.add(enumItem)
+  let
+    enumIdent = ident(enumName)
+    enumType = createEnum(postfix(enumIdent, "*"), enumItems)
+  var cases = newNimNode(nnkRecCase)
+  cases.add(newIdentDefs(postfix(ident("kind"), "*"), enumIdent))
+  for (ruleName, enumItem) in ruleNameToEnumItem.pairs:
+    cases.add(createBranch(enumItem, ident(ruleName), tupleTypes[ruleName]))
+  result = newNimNode(nnkTypeSection)
+  result.add(enumType)
+  result.add(newNimNode(nnkTypeDef).add(
+    postfix(ident(rulesName), "*"),
+    newEmptyNode(), #newNimNode(nnkGenericParams),
+    newNimNode(nnkObjectTy).add(
+      newEmptyNode(),
+      newEmptyNode(),
+      newNimNode(nnkRecList).add(cases)
+    )
+  ))
+
+proc getVarsFromRule(body: NimNode): seq[string] =
+  expectKind(body, nnkStmtList)
+  var t: Table[string, NimNode]
+  for child in body:
+    expectKind(child, nnkCall)
+    let id = child[0]
+    expectKind(id, nnkIdent)
+    t[id.strVal] = child[1]
+  for condition in t["what"]:
+    for node in condition:
+      if node.kind == nnkIdent:
+        let s = node.strVal
+        if s[0].isLowerAscii:
+          result.add(s)
+
+proc createTupleType(dataType: NimNode, vars: seq[string]): NimNode =
+  result = newNimNode(nnkTupleTy)
+  for varName in vars:
+    result.add(newIdentDefs(ident(varName), dataType))
+
+macro initSessionWithRules*(dataType: type, matchType: untyped, rules: untyped): untyped =
+  var tup = makeTupleOfRules(rules)
+  var tupleTypes: OrderedTable[string, NimNode]
+  for rule in rules:
+    let ruleName = rule.getRuleName
+    let vars = getVarsFromRule(rule[2])
+    tupleTypes[ruleName] = createTupleType(dataType, vars)
+  let
+    rulesName = dataType.strVal & rulesTypeSuffix
+    enumName = rulesName & enumSuffix
+    typeNode = createTypesForSession(rulesName, enumName, rules, tupleTypes)
   quote do:
+    `typeNode`
     block:
-      let rules = `rules`
+      let rules = `tup`
       var session = initSession[`dataType`, `matchType`](autoFire = false)
       for r in rules.fields:
         session.add(r)
