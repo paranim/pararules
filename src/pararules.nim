@@ -614,7 +614,7 @@ proc getVarsFromRule(body: NimNode): seq[string] =
     for node in condition:
       if node.kind == nnkIdent:
         let s = node.strVal
-        if s[0].isLowerAscii:
+        if s[0].isLowerAscii and not result.contains(s):
           result.add(s)
 
 proc createTupleType(dataType: NimNode, vars: seq[string]): NimNode =
