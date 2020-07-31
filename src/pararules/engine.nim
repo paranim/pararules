@@ -158,7 +158,7 @@ proc add*[T, U, MatchT](session: Session[T, MatchT], production: Production[T, U
     # successors must be sorted by ancestry (descendents first) to avoid duplicate rule firings
     leafAlphaNode.successors.sort(proc (x, y: JoinNode[T, MatchT]): int =
       if isAncestor(x, y): 1 else: -1)
-    var memNode = MemoryNode[T, MatchT](parent: joinNode, nodeType: if i == last: Leaf else: Partial, condition: condition)
+    var memNode = MemoryNode[T, MatchT](parent: joinNode, nodeType: if i == last: Leaf else: Partial, condition: condition, lastMatchId: -1)
     if memNode.nodeType == Leaf:
       memNode.filter = production.filter
       if production.callback != nil:
