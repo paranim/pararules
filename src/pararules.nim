@@ -658,7 +658,7 @@ proc createGetterProc(
     body = newStmtList(body)
   )
 
-macro initSessionWithRules*(dataType: type, matchType: untyped, rules: untyped): untyped =
+macro initSessionWithRules*(dataType: type, rules: untyped): untyped =
   var tup = makeTupleOfRules(rules)
   var
     ruleNameToTupleType: OrderedTable[string, NimNode]
@@ -681,7 +681,7 @@ macro initSessionWithRules*(dataType: type, matchType: untyped, rules: untyped):
     `getterProc`
     block:
       let rules = `tup`
-      var session = initSession[`dataType`, `matchType`](autoFire = false)
+      var session = initSession[`dataType`, `rulesIdent`](autoFire = false)
       for r in rules.fields:
         session.add(r)
       (session, rules)

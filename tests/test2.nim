@@ -306,7 +306,7 @@ test "tips":
 # custom match type
 
 var (session, rules) =
-  initSessionWithRules(Fact, FactRules):
+  initSessionWithRules(Fact):
     rule getPlayer(Fact, FactRules):
       what:
         (Player, X, x)
