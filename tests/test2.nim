@@ -316,14 +316,6 @@ var (session, rules) =
         (Global, PressedKeys, keys)
 
 test "custom match type":
-  session.initMatch = proc (ruleName: string): FactMatch =
-    case ruleName:
-      of "getPlayer":
-        FactMatch(kind: FactMatchGetPlayer)
-      of "getKeys":
-        FactMatch(kind: FactMatchGetKeys)
-      else:
-        raise newException(Exception, "Invalid rule: " & ruleName)
   session.insert(Player, X, 0.0)
   session.insert(Player, Y, 1.0)
   var keys = initHashSet[int]()

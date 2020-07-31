@@ -662,7 +662,7 @@ proc createCaseOfKeyCheckers(ruleIdent: NimNode, objIdent: NimNode, keyIdent: Ni
 
 proc createGetterProc(
     dataType: NimNode,
-    rulesType: NimNode,
+    matchType: NimNode,
     ruleNameToVars: OrderedTable[string, seq[string]],
     ruleNameToEnumItem: OrderedTable[string, NimNode]
   ): NimNode =
@@ -679,7 +679,7 @@ proc createGetterProc(
     name = postfix(procId, "*"),
     params = [
       dataType,
-      newIdentDefs(objIdent, rulesType),
+      newIdentDefs(objIdent, matchType),
       newIdentDefs(keyIdent, ident("string"))
     ],
     body = newStmtList(body)
@@ -687,7 +687,7 @@ proc createGetterProc(
 
 proc createSetterProc(
     dataType: NimNode,
-    rulesType: NimNode,
+    matchType: NimNode,
     ruleNameToVars: OrderedTable[string, seq[string]],
     ruleNameToEnumItem: OrderedTable[string, NimNode]
   ): NimNode =
@@ -705,7 +705,7 @@ proc createSetterProc(
     name = postfix(procId, "*"),
     params = [
       ident("void"),
-      newIdentDefs(objIdent, newNimNode(nnkVarTy).add(rulesType)),
+      newIdentDefs(objIdent, newNimNode(nnkVarTy).add(matchType)),
       newIdentDefs(keyIdent, ident("string")),
       newIdentDefs(valIdent, dataType)
     ],
@@ -714,7 +714,7 @@ proc createSetterProc(
 
 proc createCheckerProc(
     dataType: NimNode,
-    rulesType: NimNode,
+    matchType: NimNode,
     ruleNameToVars: OrderedTable[string, seq[string]],
     ruleNameToEnumItem: OrderedTable[string, NimNode]
   ): NimNode =
@@ -731,8 +731,27 @@ proc createCheckerProc(
     name = postfix(procId, "*"),
     params = [
       ident("bool"),
-      newIdentDefs(objIdent, rulesType),
+      newIdentDefs(objIdent, matchType),
       newIdentDefs(keyIdent, ident("string"))
+    ],
+    body = newStmtList(body)
+  )
+
+proc createInitMatchProc(matchType: NimNode, ruleNameToEnumItem: OrderedTable[string, NimNode]): NimNode =
+  let ruleNameIdent = ident("ruleName")
+  var body = newNimNode(nnkCaseStmt)
+  body.add(ruleNameIdent)
+  for (ruleName, enumItem) in ruleNameToEnumItem.pairs:
+    let branch = quote do:
+      `matchType`(kind: `enumItem`)
+    body.add(newNimNode(nnkOfBranch).add(ruleName.newLit, branch))
+  let notFound = quote do:
+    raise newException(Exception, "Rule not found: " & `ruleNameIdent`)
+  body.add(newNimNode(nnkElse).add(notFound))
+  newProc(
+    params = [
+      matchType,
+      newIdentDefs(ruleNameIdent, ident("string"))
     ],
     body = newStmtList(body)
   )
@@ -761,6 +780,7 @@ macro initSessionWithRules*(dataType: type, rules: untyped): untyped =
     getterProc = createGetterProc(dataType, matchIdent, ruleNameToVars, ruleNameToEnumItem)
     setterProc = createSetterProc(dataType, matchIdent, ruleNameToVars, ruleNameToEnumItem)
     checkerProc = createCheckerProc(dataType, matchIdent, ruleNameToVars, ruleNameToEnumItem)
+    initMatchProc = createInitMatchProc(matchIdent, ruleNameToEnumItem)
   quote do:
     `typeNode`
     `getterProc`
@@ -769,9 +789,10 @@ macro initSessionWithRules*(dataType: type, rules: untyped): untyped =
     block:
       let rules = `tup`
       var session = initSession[`dataType`, `matchIdent`](autoFire = false)
+      session.initMatch = `initMatchProc`
       for r in rules.fields:
         session.add(r)
-      (session, rules)
+      (session: session, rules: rules)
 
 ## wrapper macros
 ## these are only here so the engine doesn't need to be imported directly
