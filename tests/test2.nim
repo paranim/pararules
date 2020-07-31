@@ -307,11 +307,11 @@ test "tips":
 
 var (session, rules) =
   initSessionWithRules(Fact):
-    rule getPlayer(Fact, FactMatch):
+    rule getPlayer(Fact):
       what:
         (Player, X, x)
         (Player, Y, y)
-    rule getKeys(Fact, FactMatch):
+    rule getKeys(Fact):
       what:
         (Global, PressedKeys, keys)
 

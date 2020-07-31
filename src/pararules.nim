@@ -759,7 +759,6 @@ proc createInitMatchProc(matchType: NimNode, ruleNameToEnumItem: OrderedTable[st
 const matchTypeSuffix = "Match"
 
 macro initSessionWithRules*(dataType: type, rules: untyped): untyped =
-  var tup = makeTupleOfRules(rules)
   var
     ruleNameToTupleType: OrderedTable[string, NimNode]
     ruleNameToEnumItem: OrderedTable[string, NimNode]
@@ -781,6 +780,13 @@ macro initSessionWithRules*(dataType: type, rules: untyped): untyped =
     setterProc = createSetterProc(dataType, matchIdent, ruleNameToVars, ruleNameToEnumItem)
     checkerProc = createCheckerProc(dataType, matchIdent, ruleNameToVars, ruleNameToEnumItem)
     initMatchProc = createInitMatchProc(matchIdent, ruleNameToEnumItem)
+  var tup = makeTupleOfRules(rules)
+  for expr in tup:
+    let rule = expr[1]
+    expectKind(rule, nnkCommand)
+    var call = rule[1]
+    expectKind(call, nnkCall)
+    call.add(matchIdent)
   quote do:
     `typeNode`
     `getterProc`
