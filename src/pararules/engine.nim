@@ -88,7 +88,7 @@ type
     insideRule*: bool
     thenNodes: ref HashSet[ptr MemoryNode[T, MatchT]]
     autoFire: bool
-    initMatch*: InitMatchFn[MatchT]
+    initMatch: InitMatchFn[MatchT]
 
 proc addNode(node: AlphaNode, newNode: AlphaNode): AlphaNode =
   for child in node.children:

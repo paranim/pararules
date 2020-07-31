@@ -306,7 +306,7 @@ test "tips":
 # custom match type
 
 var (session, rules) =
-  initSessionWithRules(Fact):
+  initSessionWithRules(Fact, autoFire = false):
     rule getPlayer(Fact):
       what:
         (Player, X, x)
@@ -329,8 +329,8 @@ test "custom match type":
   var keys = initHashSet[int]()
   keys.incl(262)
   session.insert(Global, PressedKeys, keys)
-  session.fireRules
   let indexes = session.findAll(rules.getPlayer)
   check indexes.len == 1
-  let ret = session.get(rules.getPlayer, indexes[0])
-  check ret.x == 1.0
+  check session.get(rules.getPlayer, indexes[0]).x == 0.0
+  session.fireRules
+  check session.get(rules.getPlayer, indexes[0]).x == 1.0

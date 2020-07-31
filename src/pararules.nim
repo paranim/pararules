@@ -758,12 +758,16 @@ proc createInitMatchProc(matchType: NimNode, ruleNameToEnumItem: OrderedTable[st
 
 const matchTypeSuffix = "Match"
 
-macro initSessionWithRules*(dataType: type, rules: untyped): untyped =
+macro initSessionWithRules*(dataType: type, args: varargs[untyped]): untyped =
   var
     ruleNameToTupleType: OrderedTable[string, NimNode]
     ruleNameToEnumItem: OrderedTable[string, NimNode]
     ruleNameToVars: OrderedTable[string, seq[string]]
-  let matchName = dataType.strVal & matchTypeSuffix
+  let
+    matchName = dataType.strVal & matchTypeSuffix
+    argCount = args.len
+    opts = args[0 ..< argCount-1]
+    rules = args[argCount-1]
   for rule in rules:
     let
       name = rule.getRuleName
@@ -787,6 +791,12 @@ macro initSessionWithRules*(dataType: type, rules: untyped): untyped =
     var call = rule[1]
     expectKind(call, nnkCall)
     call.add(matchIdent)
+  let sessionSym = bindSym("initSession")
+  var session = newNimNode(nnkCall).add(newNimNode(nnkBracketExpr).add(sessionSym, dataType, matchIdent))
+  for opt in opts:
+    expectKind(opt, nnkExprEqExpr)
+    session.add(opt)
+  session.add(newNimNode(nnkExprEqExpr).add(ident("initMatch"), initMatchProc))
   quote do:
     `typeNode`
     `getterProc`
@@ -794,8 +804,7 @@ macro initSessionWithRules*(dataType: type, rules: untyped): untyped =
     `checkerProc`
     block:
       let rules = `tup`
-      var session = initSession[`dataType`, `matchIdent`](autoFire = false)
-      session.initMatch = `initMatchProc`
+      var session = `session`
       for r in rules.fields:
         session.add(r)
       (session: session, rules: rules)
@@ -805,7 +814,7 @@ macro initSessionWithRules*(dataType: type, rules: untyped): untyped =
 
 macro initSession*(dataType: type, autoFire: bool = true): untyped =
   quote do:
-    initSession[`dataType`, Vars[`dataType`]](`autoFire`)
+    initSession[`dataType`, Vars[`dataType`]](autoFire = `autoFire`)
 
 macro fireRules*(session: Session) =
   quote do:
