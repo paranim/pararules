@@ -302,14 +302,14 @@ macro query*(session: Session, prod: Production, args: varargs[untyped]): untype
 
 ## schema
 
-proc createBranch(enumItemName: NimNode, fieldName: NimNode, typ: NimNode): NimNode =
+proc createVariantBranch(enumItemName: NimNode, fieldName: NimNode, typ: NimNode): NimNode =
   result = newNimNode(nnkOfBranch)
   var list = newNimNode(nnkRecList)
   let field = postfix(fieldName, "*")
   list.add(newIdentDefs(field, typ))
   result.add(enumItemName, list)
 
-proc createEnum(name: NimNode, enumItems: seq[NimNode]): NimNode =
+proc createVariantEnum(name: NimNode, enumItems: seq[NimNode]): NimNode =
   result = newNimNode(nnkTypeDef).add(
     newNimNode(nnkPragmaExpr).add(name).add(
       newNimNode(nnkPragma).add(ident("pure"))),
@@ -323,14 +323,14 @@ proc createTypes(dataType: NimNode, enumName: NimNode, types: seq[NimNode]): Nim
   var enumItems: seq[NimNode]
   for i in 0 ..< types.len:
     enumItems.add(ident(dataType.strVal & typeEnumPrefix & $i))
-  let enumType = createEnum(postfix(enumName, "*"), enumItems)
+  let enumType = createVariantEnum(postfix(enumName, "*"), enumItems)
   var cases = newNimNode(nnkRecCase)
   cases.add(newIdentDefs(postfix(ident("kind"), "*"), enumName))
   for i in 0 ..< types.len:
     let
       enumItemName = ident(dataType.strVal & typeEnumPrefix & $i)
       fieldName = ident(typePrefix & $i)
-    cases.add(createBranch(enumItemName, fieldName, types[i]))
+    cases.add(createVariantBranch(enumItemName, fieldName, types[i]))
 
   result = newNimNode(nnkTypeSection)
   result.add(enumType)
@@ -585,11 +585,11 @@ proc createTypesForSession(
     enumItems.add(item)
   let
     enumIdent = ident(enumName)
-    enumType = createEnum(postfix(enumIdent, "*"), enumItems)
+    enumType = createVariantEnum(postfix(enumIdent, "*"), enumItems)
   var cases = newNimNode(nnkRecCase)
   cases.add(newIdentDefs(postfix(ident("kind"), "*"), enumIdent))
   for (ruleName, enumItem) in ruleNameToEnumItem.pairs:
-    cases.add(createBranch(enumItem, ident(ruleName), ruleNameToTupleType[ruleName]))
+    cases.add(createVariantBranch(enumItem, ident(ruleName), ruleNameToTupleType[ruleName]))
   result = newNimNode(nnkTypeSection)
   result.add(enumType)
   result.add(newNimNode(nnkTypeDef).add(
@@ -625,28 +625,45 @@ proc createTupleType(dataType: NimNode, vars: seq[string]): NimNode =
   for varName in vars:
     result.add(newIdentDefs(ident(varName), maybeType))
 
+proc createCaseOfKeyGetters(objIdent: NimNode, keyIdent: NimNode, ruleIdent: NimNode, vars: seq[string]): NimNode =
+  result = newNimNode(nnkCaseStmt)
+  result.add(keyIdent)
+  for varName in vars:
+    let
+      varIdent = ident(varName)
+      branch = quote do:
+        return `objIdent`.`ruleIdent`.`varIdent`.fact
+    result.add(newNimNode(nnkOfBranch).add(varName.newLit, branch))
+
+type CaseType = enum
+  Getter,
+
+proc createCaseOfKinds(
+    objIdent: NimNode,
+    keyIdent: NimNode,
+    ruleNameToVars: OrderedTable[string, seq[string]],
+    ruleNameToEnumItem: OrderedTable[string, NimNode],
+    caseType: CaseType
+  ): NimNode =
+  result = newNimNode(nnkCaseStmt)
+  result.add(newDotExpr(objIdent, ident("kind")))
+  for (ruleName, enumItem) in ruleNameToEnumItem.pairs:
+    let branch =
+      case caseType:
+        of Getter: createCaseOfKeyGetters(objIdent, keyIdent, ident(ruleName), ruleNameToVars[ruleName])
+    result.add(newNimNode(nnkOfBranch).add(enumItem, branch))
+
 proc createGetterProc(
     dataType: NimNode,
     rulesType: NimNode,
-    ruleNameToTupleType: OrderedTable[string, NimNode],
+    ruleNameToVars: OrderedTable[string, seq[string]],
     ruleNameToEnumItem: OrderedTable[string, NimNode]
   ): NimNode =
   let
     procId = ident("[]")
     rules = ident("rules")
     key = ident("key")
-    ## FIXME: temporary hack
-    body = quote do:
-      case `rules`.kind:
-        of FactRulesGetPlayer:
-          case `key`:
-            of "x": return `rules`.getPlayer.x.fact
-            of "y": return `rules`.getPlayer.y.fact
-            else: raise newException(Exception, "Key not found: " & `key`)
-        of FactRulesGetKeys:
-          case `key`:
-            of "keys": return `rules`.getKeys.keys.fact
-            else: raise newException(Exception, "Key not found: " & `key`)
+    body = createCaseOfKinds(rules, key, ruleNameToVars, ruleNameToEnumItem, Getter)
 
   newProc(
     name = postfix(procId, "*"),
@@ -663,6 +680,7 @@ macro initSessionWithRules*(dataType: type, rules: untyped): untyped =
   var
     ruleNameToTupleType: OrderedTable[string, NimNode]
     ruleNameToEnumItem: OrderedTable[string, NimNode]
+    ruleNameToVars: OrderedTable[string, seq[string]]
   let rulesName = dataType.strVal & rulesTypeSuffix
   for rule in rules:
     let
@@ -671,11 +689,12 @@ macro initSessionWithRules*(dataType: type, rules: untyped): untyped =
       vars = getVarsFromRule(rule[2])
     ruleNameToTupleType[name] = createTupleType(dataType, vars)
     ruleNameToEnumItem[name] = enumItem
+    ruleNameToVars[name] = vars
   let
     enumName = rulesName & enumSuffix
     typeNode = createTypesForSession(rulesName, enumName, rules, ruleNameToTupleType, ruleNameToEnumItem)
     rulesIdent = ident(rulesName)
-    getterProc = createGetterProc(dataType, rulesIdent, ruleNameToTupleType, ruleNameToEnumItem)
+    getterProc = createGetterProc(dataType, rulesIdent, ruleNameToVars, ruleNameToEnumItem)
   quote do:
     `typeNode`
     `getterProc`
