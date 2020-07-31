@@ -381,6 +381,50 @@ rule getCharacter(Fact):
 
 You need to write `id != Player.ord` instead, because pararules transforms all ids to normal integers and gives them back that way.
 
+## Performance
+
+By default, rules are fired after every `insert` call. This can be inefficient; you should normally only fire the rules once per frame. You can disable this when creating your session:
+
+```nim
+var session = initSession(Fact, autoFire = false)
+```
+
+Then, you need to explicitly fire the rules:
+
+```nim
+session.insert(Global, DeltaTime, game.deltaTime)
+session.insert(Global, TotalTime, game.totalTime)
+session.fireRules()
+```
+
+Additionally, a very significant performance gain can be had by creating the session and rules in a single command:
+
+```nim
+var (session, rules) =
+  initSessionWithRules(Fact, autoFire = false):
+    rule getPlayer(Fact):
+      what:
+        (Player, X, x)
+        (Player, Y, y)
+    rule movePlayer(Fact):
+      what:
+        (Global, DeltaTime, dt)
+        (Global, PressedKeys, keys, then = false)
+        (Player, X, x, then = false)
+      then:
+        if keys.contains(263): # left arrow
+          session.insert(Player, X, x - 1.0)
+        elif keys.contains(262): # right arrow
+          session.insert(Player, X, x + 1.0)
+```
+
+This is not merely a convenience; there is a very big internal difference. Since `initSessionWithRules` knows all of its rules at compile time, it is able to generate a special type to store the matches. Normally, matches are stored in tables, which are significantly slower.
+
+There are a few downsides:
+
+1. `initSessionWithRules` must be called at the top level of your module, not inside a procedure, because it is generating types and procedures.
+2. You will not be able to `add` new rules to the session afterwards, because it must know all of its rules at compile time.
+
 ## Tips
 
 If you're trying to debug a `cond` block, keep in mind that you can put whatever arbitrary code you want in there. For example, you can make it print out the values by creating a new scope with `block`, as long as the condition itself is the last thing in that scope:
@@ -410,52 +454,6 @@ session.add:
       (`playerId`, X, x)
       (`playerId`, Y, y)
 ```
-
-## Firing rules manually
-
-By default, rules are fired after every `insert` call. This can be inefficient; you should normally only fire the rules once per frame. You can disable this when creating your session:
-
-```nim
-var session = initSession(Fact, autoFire = false)
-```
-
-Then, you need to explicitly fire the rules:
-
-```nim
-session.insert(Global, DeltaTime, game.deltaTime)
-session.insert(Global, TotalTime, game.totalTime)
-session.fireRules()
-```
-
-## Performance
-
-It is possible to create the session and rules in a single command:
-
-```nim
-var (session, rules) =
-  initSessionWithRules(Fact, autoFire = false):
-    rule getPlayer(Fact):
-      what:
-        (Player, X, x)
-        (Player, Y, y)
-    rule movePlayer(Fact):
-      what:
-        (Global, DeltaTime, dt)
-        (Global, PressedKeys, keys, then = false)
-        (Player, X, x, then = false)
-      then:
-        if keys.contains(263): # left arrow
-          session.insert(Player, X, x - 1.0)
-        elif keys.contains(262): # right arrow
-          session.insert(Player, X, x + 1.0)
-```
-
-This is not merely a convenience; there is a significant internal difference going on. Since `initSessionWithRules` knows all of its rules at compile time, it is able to generate a special type to store the matches. Normally, matches are stored in tables, which are significantly slower.
-
-There are a few downsides:
-
-1. `initSessionWithRules` must be called at the top level of your module, not inside a procedure, because it is generating types and procedures.
-2. You will not be able to `add` new rules to the session afterwards, because it must know all of its rules at compile time.
 
 ## Wrap up
 

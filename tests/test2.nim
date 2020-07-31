@@ -286,23 +286,6 @@ test "generating ids":
 
   check session.findAll(rule1).len == 5
 
-test "tips":
-  const playerId = Player # just to make sure this works
-
-  let rule1 =
-    rule getPlayer(Fact):
-      what:
-        (`playerId`, X, x)
-        (`playerId`, Y, y)
-
-  var session = initSession(Fact)
-  session.add(rule1)
-
-  session.insert(Player, X, 0f)
-  session.insert(Player, Y, 0f)
-
-  check session.findAll(rule1).len == 1
-
 # custom match type
 
 var (session, rules) =
@@ -334,3 +317,20 @@ test "performance":
   check session.get(rules.getPlayer, indexes[0]).x == 0.0
   session.fireRules
   check session.get(rules.getPlayer, indexes[0]).x == 1.0
+
+test "tips":
+  const playerId = Player # just to make sure this works
+
+  let rule1 =
+    rule getPlayer(Fact):
+      what:
+        (`playerId`, X, x)
+        (`playerId`, Y, y)
+
+  var session = initSession(Fact)
+  session.add(rule1)
+
+  session.insert(Player, X, 0f)
+  session.insert(Player, Y, 0f)
+
+  check session.findAll(rule1).len == 1
