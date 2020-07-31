@@ -311,14 +311,26 @@ var (session, rules) =
       what:
         (Player, X, x)
         (Player, Y, y)
-    rule getKeys(Fact):
+    rule movePlayer(Fact):
       what:
-        (Global, PressedKeys, keys)
+        (Global, DeltaTime, dt)
+        (Global, PressedKeys, keys, then = false)
+        (Player, X, x, then = false)
+      then:
+        if keys.contains(263): # left arrow
+          session.insert(Player, X, x - 1.0)
+        elif keys.contains(262): # right arrow
+          session.insert(Player, X, x + 1.0)
 
 test "custom match type":
   session.insert(Player, X, 0.0)
   session.insert(Player, Y, 1.0)
+  session.insert(Global, DeltaTime, 100.0)
   var keys = initHashSet[int]()
   keys.incl(262)
   session.insert(Global, PressedKeys, keys)
-  check session.findAll(rules.getPlayer).len == 1
+  session.fireRules
+  let indexes = session.findAll(rules.getPlayer)
+  check indexes.len == 1
+  let ret = session.get(rules.getPlayer, indexes[0])
+  check ret.x == 1.0
