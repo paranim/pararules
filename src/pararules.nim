@@ -625,7 +625,7 @@ proc createTupleType(dataType: NimNode, vars: seq[string]): NimNode =
   for varName in vars:
     result.add(newIdentDefs(ident(varName), maybeType))
 
-proc createCaseOfKeyGetters(objIdent: NimNode, keyIdent: NimNode, ruleIdent: NimNode, vars: seq[string]): NimNode =
+proc createCaseOfKeyGetters(ruleIdent: NimNode, objIdent: NimNode, keyIdent: NimNode, vars: seq[string]): NimNode =
   result = newNimNode(nnkCaseStmt)
   result.add(keyIdent)
   for varName in vars:
@@ -634,24 +634,22 @@ proc createCaseOfKeyGetters(objIdent: NimNode, keyIdent: NimNode, ruleIdent: Nim
       branch = quote do:
         return `objIdent`.`ruleIdent`.`varIdent`.fact
     result.add(newNimNode(nnkOfBranch).add(varName.newLit, branch))
+  let notFound = quote do:
+    raise newException(Exception, "Key not found: " & `keyIdent`)
+  result.add(newNimNode(nnkElse).add(notFound))
 
-type CaseType = enum
-  Getter,
-
-proc createCaseOfKinds(
-    objIdent: NimNode,
-    keyIdent: NimNode,
-    ruleNameToVars: OrderedTable[string, seq[string]],
-    ruleNameToEnumItem: OrderedTable[string, NimNode],
-    caseType: CaseType
-  ): NimNode =
+proc createCaseOfKeySetters(ruleIdent: NimNode, objIdent: NimNode, keyIdent: NimNode, valIdent: NimNode, vars: seq[string]): NimNode =
   result = newNimNode(nnkCaseStmt)
-  result.add(newDotExpr(objIdent, ident("kind")))
-  for (ruleName, enumItem) in ruleNameToEnumItem.pairs:
-    let branch =
-      case caseType:
-        of Getter: createCaseOfKeyGetters(objIdent, keyIdent, ident(ruleName), ruleNameToVars[ruleName])
-    result.add(newNimNode(nnkOfBranch).add(enumItem, branch))
+  result.add(keyIdent)
+  for varName in vars:
+    let
+      varIdent = ident(varName)
+      branch = quote do:
+        `objIdent`.`ruleIdent`.`varIdent` = (fact: `valIdent`, isSet: true)
+    result.add(newNimNode(nnkOfBranch).add(varName.newLit, branch))
+  let notFound = quote do:
+    raise newException(Exception, "Key not found: " & `keyIdent`)
+  result.add(newNimNode(nnkElse).add(notFound))
 
 proc createGetterProc(
     dataType: NimNode,
@@ -661,16 +659,46 @@ proc createGetterProc(
   ): NimNode =
   let
     procId = ident("[]")
-    rules = ident("rules")
-    key = ident("key")
-    body = createCaseOfKinds(rules, key, ruleNameToVars, ruleNameToEnumItem, Getter)
-
+    objIdent = ident("rules")
+    keyIdent = ident("key")
+  var body = newNimNode(nnkCaseStmt)
+  body.add(newDotExpr(objIdent, ident("kind")))
+  for (ruleName, enumItem) in ruleNameToEnumItem.pairs:
+    let branch = createCaseOfKeyGetters(ident(ruleName), objIdent, keyIdent, ruleNameToVars[ruleName])
+    body.add(newNimNode(nnkOfBranch).add(enumItem, branch))
   newProc(
     name = postfix(procId, "*"),
     params = [
       dataType,
-      newIdentDefs(rules, rulesType),
-      newIdentDefs(key, ident("string"))
+      newIdentDefs(objIdent, rulesType),
+      newIdentDefs(keyIdent, ident("string"))
+    ],
+    body = newStmtList(body)
+  )
+
+proc createSetterProc(
+    dataType: NimNode,
+    rulesType: NimNode,
+    ruleNameToVars: OrderedTable[string, seq[string]],
+    ruleNameToEnumItem: OrderedTable[string, NimNode]
+  ): NimNode =
+  let
+    procId = ident("[]=")
+    objIdent = ident("rules")
+    keyIdent = ident("key")
+    valIdent = ident("val")
+  var body = newNimNode(nnkCaseStmt)
+  body.add(newDotExpr(objIdent, ident("kind")))
+  for (ruleName, enumItem) in ruleNameToEnumItem.pairs:
+    let branch = createCaseOfKeySetters(ident(ruleName), objIdent, keyIdent, valIdent, ruleNameToVars[ruleName])
+    body.add(newNimNode(nnkOfBranch).add(enumItem, branch))
+  newProc(
+    name = postfix(procId, "*"),
+    params = [
+      ident("void"),
+      newIdentDefs(objIdent, newNimNode(nnkVarTy).add(rulesType)),
+      newIdentDefs(keyIdent, ident("string")),
+      newIdentDefs(valIdent, dataType)
     ],
     body = newStmtList(body)
   )
@@ -695,9 +723,11 @@ macro initSessionWithRules*(dataType: type, rules: untyped): untyped =
     typeNode = createTypesForSession(rulesName, enumName, rules, ruleNameToTupleType, ruleNameToEnumItem)
     rulesIdent = ident(rulesName)
     getterProc = createGetterProc(dataType, rulesIdent, ruleNameToVars, ruleNameToEnumItem)
+    setterProc = createSetterProc(dataType, rulesIdent, ruleNameToVars, ruleNameToEnumItem)
   quote do:
     `typeNode`
     `getterProc`
+    `setterProc`
     block:
       let rules = `tup`
       var session = initSession[`dataType`, `rulesIdent`](autoFire = false)

@@ -327,18 +327,6 @@ proc hasKey(t: FactRules, key: string): bool =
         of "keys": return t.getKeys.keys.isSet
         else: false
 
-proc `[]=`(t: var FactRules, key: string, val: Fact) =
-  case t.kind:
-    of FactRulesGetPlayer:
-      case key:
-        of "x": t.getPlayer.x = (val, true)
-        of "y": t.getPlayer.y = (val, true)
-        else: raise newException(Exception, "Can't set key: " & key)
-    of FactRulesGetKeys:
-      case key:
-        of "keys": t.getKeys.keys = (val, true)
-        else: raise newException(Exception, "Key not found: " & key)
-
 test "custom match type":
   session.initMatch = proc (ruleName: string): FactRules =
     case ruleName:
