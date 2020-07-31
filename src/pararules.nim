@@ -571,8 +571,6 @@ use `Strings` in the schema.
 
 ## initSessionWithRules
 
-const rulesTypeSuffix = "Rules"
-
 proc createTypesForSession(
     rulesName: string,
     enumName: string,
@@ -670,7 +668,7 @@ proc createGetterProc(
   ): NimNode =
   let
     procId = ident("[]")
-    objIdent = ident("rules")
+    objIdent = ident("match")
     keyIdent = ident("key")
   var body = newNimNode(nnkCaseStmt)
   body.add(newDotExpr(objIdent, ident("kind")))
@@ -695,7 +693,7 @@ proc createSetterProc(
   ): NimNode =
   let
     procId = ident("[]=")
-    objIdent = ident("rules")
+    objIdent = ident("match")
     keyIdent = ident("key")
     valIdent = ident("val")
   var body = newNimNode(nnkCaseStmt)
@@ -722,7 +720,7 @@ proc createCheckerProc(
   ): NimNode =
   let
     procId = ident("hasKey")
-    objIdent = ident("rules")
+    objIdent = ident("match")
     keyIdent = ident("key")
   var body = newNimNode(nnkCaseStmt)
   body.add(newDotExpr(objIdent, ident("kind")))
@@ -739,28 +737,30 @@ proc createCheckerProc(
     body = newStmtList(body)
   )
 
+const matchTypeSuffix = "Match"
+
 macro initSessionWithRules*(dataType: type, rules: untyped): untyped =
   var tup = makeTupleOfRules(rules)
   var
     ruleNameToTupleType: OrderedTable[string, NimNode]
     ruleNameToEnumItem: OrderedTable[string, NimNode]
     ruleNameToVars: OrderedTable[string, seq[string]]
-  let rulesName = dataType.strVal & rulesTypeSuffix
+  let matchName = dataType.strVal & matchTypeSuffix
   for rule in rules:
     let
       name = rule.getRuleName
-      enumItem = ident(rulesName & name)
+      enumItem = ident(matchName & name)
       vars = getVarsFromRule(rule[2])
     ruleNameToTupleType[name] = createTupleType(dataType, vars)
     ruleNameToEnumItem[name] = enumItem
     ruleNameToVars[name] = vars
   let
-    enumName = rulesName & enumSuffix
-    typeNode = createTypesForSession(rulesName, enumName, rules, ruleNameToTupleType, ruleNameToEnumItem)
-    rulesIdent = ident(rulesName)
-    getterProc = createGetterProc(dataType, rulesIdent, ruleNameToVars, ruleNameToEnumItem)
-    setterProc = createSetterProc(dataType, rulesIdent, ruleNameToVars, ruleNameToEnumItem)
-    checkerProc = createCheckerProc(dataType, rulesIdent, ruleNameToVars, ruleNameToEnumItem)
+    enumName = matchName & enumSuffix
+    typeNode = createTypesForSession(matchName, enumName, rules, ruleNameToTupleType, ruleNameToEnumItem)
+    matchIdent = ident(matchName)
+    getterProc = createGetterProc(dataType, matchIdent, ruleNameToVars, ruleNameToEnumItem)
+    setterProc = createSetterProc(dataType, matchIdent, ruleNameToVars, ruleNameToEnumItem)
+    checkerProc = createCheckerProc(dataType, matchIdent, ruleNameToVars, ruleNameToEnumItem)
   quote do:
     `typeNode`
     `getterProc`
@@ -768,7 +768,7 @@ macro initSessionWithRules*(dataType: type, rules: untyped): untyped =
     `checkerProc`
     block:
       let rules = `tup`
-      var session = initSession[`dataType`, `rulesIdent`](autoFire = false)
+      var session = initSession[`dataType`, `matchIdent`](autoFire = false)
       for r in rules.fields:
         session.add(r)
       (session, rules)

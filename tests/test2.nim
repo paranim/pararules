@@ -307,21 +307,21 @@ test "tips":
 
 var (session, rules) =
   initSessionWithRules(Fact):
-    rule getPlayer(Fact, FactRules):
+    rule getPlayer(Fact, FactMatch):
       what:
         (Player, X, x)
         (Player, Y, y)
-    rule getKeys(Fact, FactRules):
+    rule getKeys(Fact, FactMatch):
       what:
         (Global, PressedKeys, keys)
 
 test "custom match type":
-  session.initMatch = proc (ruleName: string): FactRules =
+  session.initMatch = proc (ruleName: string): FactMatch =
     case ruleName:
       of "getPlayer":
-        FactRules(kind: FactRulesGetPlayer)
+        FactMatch(kind: FactMatchGetPlayer)
       of "getKeys":
-        FactRules(kind: FactRulesGetKeys)
+        FactMatch(kind: FactMatchGetKeys)
       else:
         raise newException(Exception, "Invalid rule: " & ruleName)
   session.insert(Player, X, 0.0)
