@@ -315,18 +315,6 @@ var (session, rules) =
       what:
         (Global, PressedKeys, keys)
 
-proc hasKey(t: FactRules, key: string): bool =
-  case t.kind:
-    of FactRulesGetPlayer:
-      case key:
-        of "x": t.getPlayer.x.isSet
-        of "y": t.getPlayer.y.isSet
-        else: false
-    of FactRulesGetKeys:
-      case key:
-        of "keys": return t.getKeys.keys.isSet
-        else: false
-
 test "custom match type":
   session.initMatch = proc (ruleName: string): FactRules =
     case ruleName:

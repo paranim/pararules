@@ -651,6 +651,17 @@ proc createCaseOfKeySetters(ruleIdent: NimNode, objIdent: NimNode, keyIdent: Nim
     raise newException(Exception, "Key not found: " & `keyIdent`)
   result.add(newNimNode(nnkElse).add(notFound))
 
+proc createCaseOfKeyCheckers(ruleIdent: NimNode, objIdent: NimNode, keyIdent: NimNode, vars: seq[string]): NimNode =
+  result = newNimNode(nnkCaseStmt)
+  result.add(keyIdent)
+  for varName in vars:
+    let
+      varIdent = ident(varName)
+      branch = quote do:
+        return `objIdent`.`ruleIdent`.`varIdent`.isSet
+    result.add(newNimNode(nnkOfBranch).add(varName.newLit, branch))
+  result.add(newNimNode(nnkElse).add(false.newLit))
+
 proc createGetterProc(
     dataType: NimNode,
     rulesType: NimNode,
@@ -703,6 +714,31 @@ proc createSetterProc(
     body = newStmtList(body)
   )
 
+proc createCheckerProc(
+    dataType: NimNode,
+    rulesType: NimNode,
+    ruleNameToVars: OrderedTable[string, seq[string]],
+    ruleNameToEnumItem: OrderedTable[string, NimNode]
+  ): NimNode =
+  let
+    procId = ident("hasKey")
+    objIdent = ident("rules")
+    keyIdent = ident("key")
+  var body = newNimNode(nnkCaseStmt)
+  body.add(newDotExpr(objIdent, ident("kind")))
+  for (ruleName, enumItem) in ruleNameToEnumItem.pairs:
+    let branch = createCaseOfKeyCheckers(ident(ruleName), objIdent, keyIdent, ruleNameToVars[ruleName])
+    body.add(newNimNode(nnkOfBranch).add(enumItem, branch))
+  newProc(
+    name = postfix(procId, "*"),
+    params = [
+      ident("bool"),
+      newIdentDefs(objIdent, rulesType),
+      newIdentDefs(keyIdent, ident("string"))
+    ],
+    body = newStmtList(body)
+  )
+
 macro initSessionWithRules*(dataType: type, rules: untyped): untyped =
   var tup = makeTupleOfRules(rules)
   var
@@ -724,10 +760,12 @@ macro initSessionWithRules*(dataType: type, rules: untyped): untyped =
     rulesIdent = ident(rulesName)
     getterProc = createGetterProc(dataType, rulesIdent, ruleNameToVars, ruleNameToEnumItem)
     setterProc = createSetterProc(dataType, rulesIdent, ruleNameToVars, ruleNameToEnumItem)
+    checkerProc = createCheckerProc(dataType, rulesIdent, ruleNameToVars, ruleNameToEnumItem)
   quote do:
     `typeNode`
     `getterProc`
     `setterProc`
+    `checkerProc`
     block:
       let rules = `tup`
       var session = initSession[`dataType`, `rulesIdent`](autoFire = false)
