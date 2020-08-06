@@ -1,4 +1,4 @@
-import strformat, tables, algorithm, sets, sequtils
+import tables, algorithm, sets, sequtils
 
 type
   # facts
