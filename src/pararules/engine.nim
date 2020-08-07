@@ -86,7 +86,7 @@ type
     leafNodes: ref Table[string, MemoryNode[T, MatchT]]
     idAttrNodes: ref Table[IdAttr, HashSet[ptr AlphaNode[T, MatchT]]]
     insideRule*: bool
-    thenNodes: ref HashSet[ptr MemoryNode[T, MatchT]]
+    thenQueue: ref HashSet[tuple[node: ptr MemoryNode[T, MatchT], idAttrs: IdAttrs]]
     autoFire: bool
     initMatch: InitMatchFn[MatchT]
 
@@ -249,7 +249,7 @@ proc leftActivation[T, MatchT](session: var Session[T, MatchT], node: var Memory
     node.matchIds[match.id] = idAttrs
     node.matches[idAttrs] = match
     if node.nodeType == Leaf and node.trigger and node.callback != nil:
-      session.thenNodes[].incl(node.addr)
+      session.thenQueue[].incl((node.addr, idAttrs))
     node.parent.oldIdAttrs.incl(idAttr)
   of Retract:
     node.matchIds.del(node.matches[idAttrs].id)
@@ -303,19 +303,16 @@ proc rightActivation[T, MatchT](session: var Session[T, MatchT], node: var Alpha
 
 proc fireRules*[T, MatchT](session: var Session[T, MatchT]) =
   # find all nodes with `then` blocks that need executed
-  var thenNodes: seq[ptr MemoryNode[T, MatchT]]
-  for node in session.thenNodes[].items:
-    thenNodes.add(node)
-  if thenNodes.len == 0:
-    return
-  session.thenNodes[].clear
-  # collect all nodes/vars to be executed
   var thenQueue: seq[(ptr MemoryNode[T, MatchT], MatchT)]
-  for node in thenNodes:
+  for (node, idAttrs) in session.thenQueue[].items:
     node.trigger = false
-    for match in node.matches.values:
+    if node.matches.hasKey(idAttrs):
+      let match = node.matches[idAttrs]
       if match.enabled:
-        thenQueue.add((node: node, vars: match.vars))
+        thenQueue.add((node, match.vars))
+  if thenQueue.len == 0:
+    return
+  session.thenQueue[].clear
   # execute `then` blocks
   for (node, vars) in thenQueue:
     node[].callback(vars)
@@ -391,8 +388,8 @@ proc initSession*[T, MatchT](autoFire: bool = true, initMatch: InitMatchFn[Match
   result.alphaNode = new(AlphaNode[T, MatchT])
   result.leafNodes = newTable[string, MemoryNode[T, MatchT]]()
   result.idAttrNodes = newTable[IdAttr, HashSet[ptr AlphaNode[T, MatchT]]]()
-  new result.thenNodes
-  result.thenNodes[] = initHashSet[ptr MemoryNode[T, MatchT]]()
+  new result.thenQueue
+  result.thenQueue[] = initHashSet[(ptr MemoryNode[T, MatchT], IdAttrs)]()
   result.autoFire = autoFire
   result.initMatch = initMatch
 

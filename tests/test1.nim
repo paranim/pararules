@@ -618,6 +618,33 @@ test "only last condition can fire":
 
   check count == 3
 
+test "avoid unnecessary rule firings":
+  var count = 0
+  let getPerson =
+    rule getPerson(Fact):
+      what:
+        (id, Color, color)
+        (id, LeftOf, leftOf)
+        (id, Height, height)
+      then:
+        count += 1
+
+  var session = initSession(Fact, autoFire = false)
+  session.add(getPerson)
+
+  session.insert(Bob, Color, "blue")
+  session.insert(Bob, LeftOf, Zach)
+  session.insert(Bob, Height, 72)
+  session.insert(Alice, Color, "blue")
+  session.insert(Alice, LeftOf, Zach)
+  session.insert(Alice, Height, 72)
+  session.fireRules()
+
+  session.insert(Alice, Color, "blue")
+  session.fireRules()
+
+  check count == 3
+
 # this one is not used...
 # it's just here to make sure we can define
 # multiple schemas in one module
