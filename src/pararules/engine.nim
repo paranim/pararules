@@ -310,9 +310,9 @@ proc fireRules*[T, MatchT](session: var Session[T, MatchT]) =
       let match = node.matches[idAttrs]
       if match.enabled:
         thenQueue.add((node, match.vars))
+  session.thenQueue[].clear
   if thenQueue.len == 0:
     return
-  session.thenQueue[].clear
   # execute `then` blocks
   for (node, vars) in thenQueue:
     node[].callback(vars)
