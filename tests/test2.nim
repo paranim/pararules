@@ -305,6 +305,14 @@ var (session, rules) =
         elif keys.contains(262): # right arrow
           session.insert(Player, X, x + 1.0)
 
+# this is just to ensure that this macro can be called
+# twice in one module (it uses genSym to make unique type names)
+discard initSessionWithRules(Fact, autoFire = false):
+  rule getPlayer(Fact):
+    what:
+      (Player, X, x)
+      (Player, Y, y)
+
 test "performance":
   session.insert(Player, X, 0.0)
   session.insert(Player, Y, 1.0)

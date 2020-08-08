@@ -572,8 +572,8 @@ use `Strings` in the schema.
 ## initSessionWithRules
 
 proc createTypesForSession(
-    rulesName: string,
-    enumName: string,
+    rulesSym: NimNode,
+    enumSym: NimNode,
     rules: NimNode,
     ruleNameToTupleType: OrderedTable[string, NimNode],
     ruleNameToEnumItem: OrderedTable[string, NimNode]
@@ -581,17 +581,15 @@ proc createTypesForSession(
   var enumItems: seq[NimNode]
   for item in ruleNameToEnumItem.values:
     enumItems.add(item)
-  let
-    enumIdent = ident(enumName)
-    enumType = createVariantEnum(postfix(enumIdent, "*"), enumItems)
+  let enumType = createVariantEnum(postfix(enumSym, "*"), enumItems)
   var cases = newNimNode(nnkRecCase)
-  cases.add(newIdentDefs(postfix(ident("kind"), "*"), enumIdent))
+  cases.add(newIdentDefs(postfix(ident("kind"), "*"), enumSym))
   for (ruleName, enumItem) in ruleNameToEnumItem.pairs:
     cases.add(createVariantBranch(enumItem, ident(ruleName), ruleNameToTupleType[ruleName]))
   result = newNimNode(nnkTypeSection)
   result.add(enumType)
   result.add(newNimNode(nnkTypeDef).add(
-    postfix(ident(rulesName), "*"),
+    postfix(rulesSym, "*"),
     newEmptyNode(), #newNimNode(nnkGenericParams),
     newNimNode(nnkObjectTy).add(
       newEmptyNode(),
@@ -765,34 +763,35 @@ macro initSessionWithRules*(dataType: type, args: varargs[untyped]): untyped =
     ruleNameToVars: OrderedTable[string, seq[string]]
   let
     matchName = dataType.strVal & matchTypeSuffix
+    matchSym = genSym(nskType, matchName)
     argCount = args.len
     opts = args[0 ..< argCount-1]
     rules = args[argCount-1]
   for rule in rules:
     let
       name = rule.getRuleName
-      enumItem = ident(matchName & name)
+      enumItem = genSym(nskEnumField, matchName & name)
       vars = getVarsFromRule(rule[2])
     ruleNameToTupleType[name] = createTupleType(dataType, vars)
     ruleNameToEnumItem[name] = enumItem
     ruleNameToVars[name] = vars
   let
     enumName = matchName & enumSuffix
-    typeNode = createTypesForSession(matchName, enumName, rules, ruleNameToTupleType, ruleNameToEnumItem)
-    matchIdent = ident(matchName)
-    getterProc = createGetterProc(dataType, matchIdent, ruleNameToVars, ruleNameToEnumItem)
-    setterProc = createSetterProc(dataType, matchIdent, ruleNameToVars, ruleNameToEnumItem)
-    checkerProc = createCheckerProc(dataType, matchIdent, ruleNameToVars, ruleNameToEnumItem)
-    initMatchProc = createInitMatchProc(matchIdent, ruleNameToEnumItem)
+    enumSym = genSym(nskType, enumName)
+    typeNode = createTypesForSession(matchSym, enumSym, rules, ruleNameToTupleType, ruleNameToEnumItem)
+    getterProc = createGetterProc(dataType, matchSym, ruleNameToVars, ruleNameToEnumItem)
+    setterProc = createSetterProc(dataType, matchSym, ruleNameToVars, ruleNameToEnumItem)
+    checkerProc = createCheckerProc(dataType, matchSym, ruleNameToVars, ruleNameToEnumItem)
+    initMatchProc = createInitMatchProc(matchSym, ruleNameToEnumItem)
   var tup = makeTupleOfRules(rules)
   for expr in tup:
     let rule = expr[1]
     expectKind(rule, nnkCommand)
     var call = rule[1]
     expectKind(call, nnkCall)
-    call.add(matchIdent)
+    call.add(matchSym)
   let sessionSym = bindSym("initSession")
-  var session = newNimNode(nnkCall).add(newNimNode(nnkBracketExpr).add(sessionSym, dataType, matchIdent))
+  var session = newNimNode(nnkCall).add(newNimNode(nnkBracketExpr).add(sessionSym, dataType, matchSym))
   for opt in opts:
     expectKind(opt, nnkExprEqExpr)
     session.add(opt)
