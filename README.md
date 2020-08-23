@@ -424,6 +424,7 @@ There are a few downsides:
 
 1. `initSessionWithRules` must be called at the top level of your module, not inside a procedure, because it is generating types and procedures.
 2. You will not be able to `add` new rules to the session afterwards, because it must know all of its rules at compile time.
+3. Compile times will slow down as more rules are added.
 
 ## Tips
 
