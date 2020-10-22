@@ -656,7 +656,7 @@ proc createCaseOfKeyCheckers(ruleIdent: NimNode, objIdent: NimNode, keyIdent: Ni
       branch = quote do:
         return `objIdent`.`ruleIdent`.`varIdent`.isSet
     result.add(newNimNode(nnkOfBranch).add(varName.newLit, branch))
-  result.add(newNimNode(nnkElse).add(false.newLit))
+  result.add(newNimNode(nnkElse).add(quote do: return false))
 
 proc createGetterProc(
     dataType: NimNode,
