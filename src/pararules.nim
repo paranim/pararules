@@ -808,22 +808,10 @@ macro initSessionWithRules*(dataType: type, args: varargs[untyped]): untyped =
         session.add(r)
       (session: session, rules: rules)
 
-## wrapper macros
-## these are only here so the engine doesn't need to be imported directly
+## export so the engine doesn't need to be imported directly
 
 macro initSession*(dataType: type, autoFire: bool = true): untyped =
   quote do:
     initSession[`dataType`, Vars[`dataType`]](autoFire = `autoFire`)
 
-macro fireRules*(session: Session) =
-  quote do:
-    fireRules(`session`)
-
-macro add*(session: Session, production: Production): untyped =
-  quote do:
-    add(`session`, `production`)
-
-macro get*(session: Session, production: Production, index: int): untyped =
-  quote do:
-    get(`session`, `production`, `index`)
-
+export engine.fireRules, engine.add, engine.get
