@@ -91,7 +91,7 @@ proc addCond(dataType: NimNode, vars: OrderedTable[string, VarInfo], prod: NimNo
     else:
       newNimNode(nnkExprEqExpr).add(ident("then")).add(true.newLit)
   quote do:
-    add(`prod`, `id`, `attr`, `value`, `extraArg`)
+    engine.add(`prod`, `id`, `attr`, `value`, `extraArg`)
 
 proc parseWhat(name: string, dataType: NimNode, matchType: NimNode, attrs: Table[string, int], types: seq[string], node: NimNode, condNode: NimNode, thenNode: NimNode): NimNode =
   var vars: OrderedTable[string, VarInfo]
@@ -275,30 +275,30 @@ macro find*(session: Session, prod: Production, args: varargs[untyped]): untyped
     let dataType = prod.getDataType
     let params = createParamsArray(dataType, args)
     quote do:
-      findIndex(`session`, `prod`, `params`)
+      engine.find(`session`, `prod`, `params`)
   else:
     quote do:
-      findIndex(`session`, `prod`)
+      engine.find(`session`, `prod`)
 
 macro findAll*(session: Session, prod: Production, args: varargs[untyped]): untyped =
   if args.len > 0:
     let dataType = prod.getDataType
     let params = createParamsArray(dataType, args)
     quote do:
-      findAllIndices(`session`, `prod`, `params`)
+      engine.findAll(`session`, `prod`, `params`)
   else:
     quote do:
-      findAllIndices(`session`, `prod`)
+      engine.findAll(`session`, `prod`)
 
 macro query*(session: Session, prod: Production, args: varargs[untyped]): untyped =
   if args.len > 0:
     let dataType = prod.getDataType
     let params = createParamsArray(dataType, args)
     quote do:
-      get(`session`, `prod`, findIndex(`session`, `prod`, `params`))
+      engine.get(`session`, `prod`, engine.find(`session`, `prod`, `params`))
   else:
     quote do:
-      get(`session`, `prod`, findIndex(`session`, `prod`))
+      engine.get(`session`, `prod`, engine.find(`session`, `prod`))
 
 ## schema
 
@@ -814,4 +814,4 @@ macro initSession*(dataType: type, autoFire: bool = true): untyped =
   quote do:
     initSession[`dataType`, Vars[`dataType`]](autoFire = `autoFire`)
 
-export engine.fireRules, engine.add, engine.get
+export engine.fireRules, engine.add, engine.queryAll, engine.get

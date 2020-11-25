@@ -92,20 +92,19 @@ let rule2 =
 session.add(rule2)
 ``` 
 
-As you can see, rules don't need a `then` block if you're only using them to query from the outside. In this case, we'll query it in our game loop and we'll get back a tuple whose fields have the names you created as bindings:
+As you can see, rules don't need a `then` block if you're only using them to query from the outside. In this case, we'll query it in our game loop and we'll get back a seq of tuples whose fields have the names you created as bindings:
+
+```nim
+let results = session.queryAll(rule2)
+let player = results[0]
+echo player.x, " ", player.y
+```
+
+If you are sure that there is one result, you can also just use `query`. But be careful; if there are no results, this will cause an exception:
 
 ```nim
 let player = session.query(rule2)
 echo player.x, " ", player.y
-```
-
-Be careful with `query`, though. If the facts in the rule's `what` block haven't been inserted yet, you'll get an exception. If you are unsure if the facts are there, you should use `find` + `get` instead:
-
-```nim
-let index = session.find(rule2)
-if index >= 0:
-  let player = session.get(rule2, index)
-  echo player.x, " ", player.y
 ```
 
 ## Rulesets
@@ -329,22 +328,13 @@ let player = session.query(rules.getCharacter, id = Player)
 echo player.x, " ", player.y
 ```
 
-Just as before, though, if you are not sure if the necessary facts are there, use `find` + `get` instead:
+Just as before, though, you can use `queryAll` to retrieve all results:
 
 ```nim
-let index = session.find(rules.getCharacter, id = Player)
-if index >= 0:
-  let player = session.get(rules.getCharacter, index)
+let results = session.queryAll(rules.getCharacter)
+if results.len > 0:
+  let player = results[0]
   echo player.x, " ", player.y
-```
-
-If you want to find all facts matching the query, you can use `findAll`:
-
-```nim
-let indexes = session.findAll(rules.getCharacter)
-for i in indexes:
-  let ch = session.get(rules.getCharacter, i)
-  echo ch.id, " ", ch.x, " ", ch.y
 ```
 
 ## Generating ids

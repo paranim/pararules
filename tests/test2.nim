@@ -78,6 +78,9 @@ test "queries":
   session.insert(Player, X, 0.0)
   session.insert(Player, Y, 1.0)
 
+  let results = session.queryAll(rule2)
+  echo results.len == 1
+
   let player = session.query(rule2)
   check player.x == 0.0
   check player.y == 1.0
@@ -259,8 +262,8 @@ test "joins and advanced queries":
   check player2.x == 0.0
   check player2.y == 1.0
 
-  let indexes = session.findAll(rules.getCharacter)
-  check indexes.len == 1
+  let results = session.queryAll(rules.getCharacter)
+  check results.len == 1
 
 test "generating ids":
   let rule1 =

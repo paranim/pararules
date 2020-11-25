@@ -405,27 +405,32 @@ proc matchesParams[I, T, MatchT](vars: MatchT, params: array[I, (string, T)]): b
       return false
   true
 
-proc findIndex*[I, T](session: Session, prod: Production, params: array[I, (string, T)]): int =
+proc find*[I, T](session: Session, prod: Production, params: array[I, (string, T)]): int =
   for match in session.leafNodes[prod.name].matches.values:
     if match.enabled and matchesParams(match.vars, params):
       return match.id
   -1
 
-proc findIndex*(session: Session, prod: Production): int =
+proc find*(session: Session, prod: Production): int =
   for match in session.leafNodes[prod.name].matches.values:
     if match.enabled:
       return match.id
   -1
 
-proc findAllIndices*[I, T](session: Session, prod: Production, params: array[I, (string, T)]): seq[int] =
+proc findAll*[I, T](session: Session, prod: Production, params: array[I, (string, T)]): seq[int] =
   for match in session.leafNodes[prod.name].matches.values:
     if match.enabled and matchesParams(match.vars, params):
       result.add(match.id)
 
-proc findAllIndices*(session: Session, prod: Production): seq[int] =
+proc findAll*(session: Session, prod: Production): seq[int] =
   for match in session.leafNodes[prod.name].matches.values:
     if match.enabled:
       result.add(match.id)
+
+proc queryAll*[T, U, MatchT](session: Session[T, MatchT], prod: Production[T, U, MatchT]): seq[U] =
+  for match in session.leafNodes[prod.name].matches.values:
+    if match.enabled:
+      result.add(prod.query(match.vars))
 
 proc get*[T, U, MatchT](session: Session[T, MatchT], prod: Production[T, U, MatchT], i: int): U =
   let idAttrs = session.leafNodes[prod.name].matchIds[i]

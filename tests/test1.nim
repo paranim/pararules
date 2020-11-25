@@ -46,7 +46,7 @@ test "number of conditions != number of facts":
   session.insert(Thomas, Height, 72)
   session.insert(George, Height, 72)
 
-  check session.findAll(rule1).len == 3
+  check session.queryAll(rule1).len == 3
 
 test "adding facts out of order":
   var session = initSession(Fact)
@@ -83,7 +83,7 @@ test "adding facts out of order":
 
   session.insert(David, Color, "white")
 
-  check session.findAll(rule1).len == 1
+  check session.queryAll(rule1).len == 1
 
 test "duplicate facts":
   var session = initSession(Fact)
@@ -98,13 +98,13 @@ test "duplicate facts":
   session.insert(Bob, Self, Bob)
   session.insert(Bob, Color, "red")
 
-  check session.findAll(rule1).len == 1
+  check session.queryAll(rule1).len == 1
   check session.query(rule1).c == "red"
 
   # update *both* duplicate facts from red to green
   session.insert(Bob, Color, "green")
 
-  check session.findAll(rule1).len == 1
+  check session.queryAll(rule1).len == 1
   check session.query(rule1).c == "green"
 
 test "removing facts":
@@ -122,18 +122,18 @@ test "removing facts":
   session.insert(Yair, LeftOf, Zach)
   session.insert(Alice, Color, "maize")
   session.insert(Yair, RightOf, Bob)
-  check session.findAll(rule1).len == 1
+  check session.queryAll(rule1).len == 1
 
   session.retract(Yair, RightOf, Bob)
-  check session.findAll(rule1).len == 0
+  check session.queryAll(rule1).len == 0
 
   session.retract(Bob, Color) # value parameter is not required
-  check session.findAll(rule1).len == 0
+  check session.queryAll(rule1).len == 0
 
   # re-insert to make sure idAttrNodes was cleared correctly
   session.insert(Bob, Color, "blue")
   session.insert(Yair, RightOf, Bob)
-  check session.findAll(rule1).len == 1
+  check session.queryAll(rule1).len == 1
 
 test "updating facts":
   var session = initSession(Fact, autoFire = false)
@@ -154,12 +154,12 @@ test "updating facts":
   session.insert(Alice, Color, "maize")
   session.insert(Yair, RightOf, Bob)
   session.fireRules()
-  check session.findAll(rule1).len == 1
+  check session.queryAll(rule1).len == 1
   check zVal == Zach
 
   session.insert(Yair, LeftOf, Xavier)
   session.fireRules()
-  check session.findAll(rule1).len == 1
+  check session.queryAll(rule1).len == 1
   check zVal == Xavier
 
 test "updating facts in different alpha nodes":
@@ -177,10 +177,10 @@ test "updating facts in different alpha nodes":
   session.insert(Yair, LeftOf, Zach)
   session.insert(Alice, Color, "maize")
   session.insert(Yair, RightOf, Bob)
-  check session.findAll(rule1).len == 1
+  check session.queryAll(rule1).len == 1
 
   session.insert(Yair, LeftOf, Xavier)
-  check session.findAll(rule1).len == 0
+  check session.queryAll(rule1).len == 0
 
 test "facts can be stored in multiple alpha nodes":
   var session = initSession(Fact)
@@ -218,10 +218,10 @@ test "complex conditions":
   session.insert(Yair, LeftOf, Zach)
   session.insert(Alice, Color, "maize")
   session.insert(Yair, RightOf, Bob)
-  check session.findAll(rule1).len == 0
+  check session.queryAll(rule1).len == 0
 
   session.insert(Yair, LeftOf, Charlie)
-  check session.findAll(rule1).len == 1
+  check session.queryAll(rule1).len == 1
 
 test "out-of-order joins between id and value":
   var session = initSession(Fact)
@@ -236,7 +236,7 @@ test "out-of-order joins between id and value":
   session.insert(Bob, RightOf, Alice)
   session.insert(Bob, Color, "blue")
   session.insert(Yair, RightOf, Bob)
-  check session.findAll(rule1).len == 1
+  check session.queryAll(rule1).len == 1
 
 # this was failing because we weren't testing conditions
 # in join nodes who are children of the root memory node
@@ -321,8 +321,8 @@ test "creating a ruleset":
   session.insert(Alice, Color, "red")
   session.insert(Alice, LeftOf, Bob)
 
-  check session.findAll(rules.bob).len == 1
-  check session.findAll(rules.alice).len == 1
+  check session.queryAll(rules.bob).len == 1
+  check session.queryAll(rules.alice).len == 1
 
 test "don't trigger rule when updating certain facts":
   var count = 0
@@ -415,9 +415,9 @@ test "inserting inside a rule cascades":
 
   session.insert(Bob, Color, "blue")
 
-  check session.findAll(rules.firstRule).len == 1
-  check session.findAll(rules.secondRule).len == 1
-  check session.findAll(rules.thirdRule).len == 1
+  check session.queryAll(rules.firstRule).len == 1
+  check session.queryAll(rules.secondRule).len == 1
+  check session.queryAll(rules.thirdRule).len == 1
 
 test "conditions can use external values":
   var session = initSession(Fact)
@@ -437,7 +437,7 @@ test "conditions can use external values":
   # in leftActivation would succeed.
   session.insert(Alice, LeftOf, Bob)
 
-  check session.findAll(rule1).len == 1
+  check session.queryAll(rule1).len == 1
 
   # now we prevent the rule from firing again,
   # but the old "Alice, LeftOf, Bob" fact
@@ -446,7 +446,7 @@ test "conditions can use external values":
   allowRuleToFire = false
   session.insert(Alice, LeftOf, Zach)
 
-  check session.findAll(rule1).len == 0
+  check session.queryAll(rule1).len == 0
 
 test "id + attr combos can be stored in multiple alpha nodes":
   let rules =
@@ -500,7 +500,7 @@ test "IDs can be arbitrary integers":
   session.insert(Yair, RightOf, Bob)
   session.insert(zach, LeftOf, Bob)
 
-  check session.findAll(rule1).len == 1
+  check session.queryAll(rule1).len == 1
 
 test "join value with id":
   let rules =
@@ -523,7 +523,7 @@ test "join value with id":
   session.insert(Charlie, Height, 72)
   session.insert(Bob, LeftOf, Charlie)
 
-  check session.findAll(rules.rule1).len == 1
+  check session.queryAll(rules.rule1).len == 1
 
 test "multiple joins":
   let rules =
@@ -575,7 +575,7 @@ test "join followed by non-join":
   session.insert(Charlie, Color, "green")
   session.insert(Charlie, Height, 70)
 
-  check session.findAll(rules.rule1).len == 2
+  check session.queryAll(rules.rule1).len == 2
 
 test "only last condition can fire":
   var count = 0
