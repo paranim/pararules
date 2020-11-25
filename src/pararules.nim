@@ -5,8 +5,7 @@ const
   checkPrefix = "check"
   attrToTypePrefix = "attrToType"
   typeToNamePrefix = "typeToName"
-  typePrefix = "type"
-  typeEnumPrefix = "Type"
+  typePrefix = "slot"
   enumSuffix = "Kind"
   intTypeNum = 0
   attrTypeNum = 1
@@ -29,11 +28,11 @@ proc wrap(parentNode: NimNode, dataType: NimNode, field: Field): NimNode =
     let enumName = ident(dataType.strVal & enumSuffix)
     case field:
       of Identifier:
-        let enumChoice = newDotExpr(enumName, ident(dataType.strVal & typeEnumPrefix & $intTypeNum))
-        quote do: `dataType`(kind: `enumChoice`, type0: `node`.ord)
+        let enumChoice = newDotExpr(enumName, ident(dataType.strVal & enumSuffix & $intTypeNum))
+        quote do: `dataType`(kind: `enumChoice`, slot0: `node`.ord)
       of Attribute:
-        let enumChoice = newDotExpr(enumName, ident(dataType.strVal & typeEnumPrefix & $attrTypeNum))
-        quote do: `dataType`(kind: `enumChoice`, type1: `node`)
+        let enumChoice = newDotExpr(enumName, ident(dataType.strVal & enumSuffix & $attrTypeNum))
+        quote do: `dataType`(kind: `enumChoice`, slot1: `node`)
       of Value:
         let
           dataNode = genSym(nskLet, "node")
@@ -322,13 +321,13 @@ proc createVariantEnum(name: NimNode, enumItems: seq[NimNode]): NimNode =
 proc createTypes(dataType: NimNode, enumName: NimNode, types: seq[NimNode]): NimNode =
   var enumItems: seq[NimNode]
   for i in 0 ..< types.len:
-    enumItems.add(ident(dataType.strVal & typeEnumPrefix & $i))
+    enumItems.add(ident(dataType.strVal & enumSuffix & $i))
   let enumType = createVariantEnum(postfix(enumName, "*"), enumItems)
   var cases = newNimNode(nnkRecCase)
   cases.add(newIdentDefs(postfix(ident("kind"), "*"), enumName))
   for i in 0 ..< types.len:
     let
-      enumItemName = ident(dataType.strVal & typeEnumPrefix & $i)
+      enumItemName = ident(dataType.strVal & enumSuffix & $i)
       fieldName = ident(typePrefix & $i)
     cases.add(createVariantBranch(enumItemName, fieldName, types[i]))
 
@@ -349,7 +348,7 @@ proc createEqBranch(dataType: NimNode, index: int): NimNode =
   result = newNimNode(nnkOfBranch)
   let eq = infix(newDotExpr(ident("a"), keyNode), "==", newDotExpr(ident("b"), keyNode))
   let list = newStmtList(newNimNode(nnkReturnStmt).add(eq))
-  result.add(ident(dataType.strVal & typeEnumPrefix & $index), list)
+  result.add(ident(dataType.strVal & enumSuffix & $index), list)
 
 proc createEqProc(dataType: NimNode, types: seq[NimNode]): NimNode =
   var cases = newNimNode(nnkCaseStmt).add(newDotExpr(ident("a"), ident("kind")))
@@ -376,12 +375,12 @@ proc createInitProc(dataType: NimNode, enumName: NimNode, index: int, typ: NimNo
   let x = ident("x")
   let body =
     if index == idTypeNum:
-      let enumChoice = newDotExpr(enumName, ident(dataType.strVal & typeEnumPrefix & $intTypeNum))
+      let enumChoice = newDotExpr(enumName, ident(dataType.strVal & enumSuffix & $intTypeNum))
       let id = ident(typePrefix & $intTypeNum)
       quote do:
         `dataType`(kind: `enumChoice`, `id`: `x`.ord)
     else:
-      let enumChoice = newDotExpr(enumName, ident(dataType.strVal & typeEnumPrefix & $index))
+      let enumChoice = newDotExpr(enumName, ident(dataType.strVal & enumSuffix & $index))
       let id = ident(typePrefix & $index)
       quote do:
         `dataType`(kind: `enumChoice`, `id`: `x`)

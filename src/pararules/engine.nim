@@ -201,8 +201,8 @@ proc getVarsFromFact[T, MatchT](vars: var MatchT, condition: Condition[T, MatchT
 
 proc getIdAttr[T](fact: Fact[T]): IdAttr =
   let
-    id = fact.id.type0
-    attr = fact.attr.type1.ord
+    id = fact.id.slot0
+    attr = fact.attr.slot1.ord
   (id, attr)
 
 proc leftActivation[T, MatchT](session: var Session[T, MatchT], node: var MemoryNode[T, MatchT], idAttrs: IdAttrs, vars: MatchT, token: Token[T], isNew: bool)
@@ -221,7 +221,7 @@ proc leftActivation[T, MatchT](session: var Session[T, MatchT], node: JoinNode[T
 proc leftActivation[T, MatchT](session: var Session[T, MatchT], node: JoinNode[T, MatchT], idAttrs: IdAttrs, vars: MatchT, token: Token[T]) =
   # SHORTCUT: if we know the id, only loop over alpha facts with that id
   if node.idName != "":
-    let id = vars[node.idName].type0
+    let id = vars[node.idName].slot0
     if node.alphaNode.facts.hasKey(id):
       for alphaFact in node.alphaNode.facts[id].values:
         session.leftActivation(node, idAttrs, vars, token, alphaFact)
@@ -268,7 +268,7 @@ proc rightActivation[T, MatchT](session: var Session[T, MatchT], node: JoinNode[
     for idAttrs, match in node.parent.matches.pairs:
       let vars = match.vars
       # SHORTCUT: if we know the id, compare it with the token right away
-      if node.idName != "" and vars[node.idName].type0 != token.fact.id.type0:
+      if node.idName != "" and vars[node.idName].slot0 != token.fact.id.slot0:
         continue
       var newVars = vars # making a mutable copy here is far faster than making `vars` mutable above
       if getVarsFromFact(newVars, node.condition, token.fact):
@@ -346,12 +346,12 @@ proc upsertFact[T, MatchT](session: var Session[T, MatchT], fact: Fact[T], nodes
     # rightActivation will modify it
     for n in existingNodes.items.toSeq:
       if not nodes.contains(n):
-        let oldFact = n.facts[fact.id.type0][fact.attr.type1.ord]
+        let oldFact = n.facts[fact.id.slot0][fact.attr.slot1.ord]
         session.rightActivation(n[], Token[T](fact: oldFact, kind: Retract))
     # update or insert facts, depending on whether the node already exists
     for n in nodes.items:
       if existingNodes.contains(n):
-        let oldFact = n.facts[fact.id.type0][fact.attr.type1.ord]
+        let oldFact = n.facts[fact.id.slot0][fact.attr.slot1.ord]
         session.rightActivation(n[], Token[T](fact: fact, kind: Update, oldFact: oldFact))
       else:
         session.rightActivation(n[], Token[T](fact: fact, kind: Insert))
@@ -372,8 +372,8 @@ proc retractFact*[T, MatchT](session: var Session[T, MatchT], fact: Fact[T]) =
     session.rightActivation(node[], Token[T](fact: fact, kind: Retract))
 
 proc retractFact*[T, MatchT](session: var Session[T, MatchT], id: T, attr: T) =
-  let id = id.type0
-  let attr = attr.type1.ord
+  let id = id.slot0
+  let attr = attr.slot1.ord
   let idAttr = (id, attr)
   # we use toSeq here to make a copy of idAttrNodes[idAttr], since
   # rightActivation will modify it
