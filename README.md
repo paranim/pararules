@@ -92,19 +92,20 @@ let rule2 =
 session.add(rule2)
 ``` 
 
-As you can see, rules don't need a `then` block if you're only using them to query from the outside. In this case, we'll query it in our game loop and we'll get back a seq of tuples whose fields have the names you created as bindings:
-
-```nim
-let results = session.queryAll(rule2)
-let player = results[0]
-echo player.x, " ", player.y
-```
-
-If you are sure that there is one result, you can also just use `query`. But be careful; if there are no results, this will cause an exception:
+As you can see, rules don't need a `then` block if you're only using them to query from the outside. In this case, we'll query it in our game loop and we'll get back a tuple whose fields have the names you created as bindings:
 
 ```nim
 let player = session.query(rule2)
 echo player.x, " ", player.y
+```
+
+Be careful with `query`, though. If there are no results, this will cause an exception. You can use `queryAll` instead:
+
+```nim
+let results = session.queryAll(rule2)
+if results.len > 0:
+  let player = results[0]
+  echo player.x, " ", player.y
 ```
 
 ## Rulesets
@@ -328,13 +329,13 @@ let player = session.query(rules.getCharacter, id = Player)
 echo player.x, " ", player.y
 ```
 
-Just as before, though, you can use `queryAll` to retrieve all results:
+You can also use `queryAll` to retrieve all results and filter afterwards:
 
 ```nim
-let results = session.queryAll(rules.getCharacter)
-if results.len > 0:
-  let player = results[0]
-  echo player.x, " ", player.y
+let chars = session.queryAll(rules.getCharacter)
+for c in chars:
+  if c.id == Player:
+    echo c.x, " ", c.y
 ```
 
 ## Generating ids
