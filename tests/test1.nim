@@ -294,6 +294,56 @@ test "queries":
   let locs = session.findAll(getPerson, height = 72)
   check locs.len == 2
 
+test "query all facts":
+  let getPerson =
+    rule getPerson(Fact):
+      what:
+        (id, Color, color)
+        (id, LeftOf, leftOf)
+        (id, Height, height)
+
+  var session = initSession(Fact)
+  session.add(getPerson)
+
+  session.insert(Bob, Color, "blue")
+  session.insert(Bob, LeftOf, Zach)
+  session.insert(Bob, Height, 72)
+
+  session.insert(Alice, Color, "green")
+  session.insert(Alice, LeftOf, Bob)
+  session.insert(Alice, Height, 64)
+
+  session.insert(Charlie, Color, "red")
+  session.insert(Charlie, LeftOf, Alice)
+  session.insert(Charlie, Height, 72)
+
+  let facts = session.queryAll()
+  check facts.len == 9
+
+  # make a new session and insert the facts we retrieved
+
+  var session2 = initSession(Fact)
+  session2.add(getPerson)
+
+  for fact in facts:
+    session2.insert(Id(fact.id), Attr(fact.attr), fact.value)
+
+  # check that the queries work
+
+  let loc = session2.find(getPerson, id = Bob)
+  check loc >= 0
+  let res = session2.get(getPerson, loc)
+  check res.id == Bob
+  check res.color == "blue"
+  check res.leftOf == Zach
+  check res.height == 72
+
+  let resQuery = session2.query(getPerson, id = Bob)
+  check resQuery == res
+
+  let locs = session2.findAll(getPerson, height = 72)
+  check locs.len == 2
+
 test "creating a ruleset":
   let rules =
     ruleset:

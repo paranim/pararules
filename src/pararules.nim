@@ -469,6 +469,34 @@ proc createUpdateProc(dataType: NimNode, intType: NimNode, attrType: NimNode, id
     body = newStmtList(body)
   )
 
+proc createInsertProc(dataType: NimNode, intType: NimNode, attrType: NimNode, idType: NimNode): NimNode =
+  let
+    procId = ident("insert")
+    engineProcId = bindSym("insertFact")
+    checkProcId = ident(checkPrefix & dataType.strVal)
+    initProc = ident(initPrefix & dataType.strVal)
+    session = ident("session")
+    sessionType = newNimNode(nnkVarTy).add(newNimNode(nnkBracketExpr).add(bindSym("Session")).add(dataType).add(ident("auto")))
+    id = ident("id")
+    attr = ident("attr")
+    value = ident("value")
+    body = quote do:
+      when not defined(release):
+        `checkProcId`(`attr`, `value`.kind.ord)
+      `engineProcId`(`session`, (`initProc`(`id`), `initProc`(`attr`), `value`))
+
+  newProc(
+    name = postfix(procId, "*"),
+    params = [
+      ident("void"),
+      newIdentDefs(session, sessionType),
+      newIdentDefs(id, infix(idType, "or", intType)),
+      newIdentDefs(attr, attrType),
+      newIdentDefs(value, dataType)
+    ],
+    body = newStmtList(body)
+  )
+
 proc createRetractProc(dataType: NimNode, intType: NimNode, attrType: NimNode, idType: NimNode): NimNode =
   let
     procId = ident("retract")
@@ -494,9 +522,12 @@ proc createRetractProc(dataType: NimNode, intType: NimNode, attrType: NimNode, i
 
 proc createUpdateProcs(dataType: NimNode, types: seq[NimNode]): NimNode =
   result = newStmtList()
+  # create insert and retract procs for each value type
   for i in 0 ..< types.len:
     result.add(createUpdateProc(dataType, types[0], types[1], types[2], types[i], i, "insert"))
     result.add(createUpdateProc(dataType, types[0], types[1], types[2], types[i], i, "retract"))
+  # create an insert proc whose value is wrapped in the object variant
+  result.add(createInsertProc(dataType, types[0], types[1], types[2]))
   # create a retract proc that only requires the id and attr
   result.add(createRetractProc(dataType, types[0], types[1], types[2]))
 

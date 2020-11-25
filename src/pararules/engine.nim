@@ -427,6 +427,14 @@ proc findAll*(session: Session, prod: Production): seq[int] =
     if match.enabled:
       result.add(match.id)
 
+proc queryAll*[T, MatchT](session: Session[T, MatchT]): seq[tuple[id: int, attr: int, value: T]] =
+  for idAttr, nodes in session.idAttrNodes.pairs:
+    assert nodes.len > 0
+    let
+      firstNode = nodes.toSeq[0]
+      fact = firstNode[].facts[idAttr.id][idAttr.attr]
+    result.add((idAttr.id, idAttr.attr, fact.value))
+
 proc queryAll*[T, U, MatchT](session: Session[T, MatchT], prod: Production[T, U, MatchT]): seq[U] =
   for match in session.leafNodes[prod.name].matches.values:
     if match.enabled:
