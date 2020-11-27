@@ -344,6 +344,17 @@ test "query all facts":
   let locs = session2.findAll(getPerson, height = 72)
   check locs.len == 2
 
+  # try unwrapping the values
+
+  for fact in facts:
+    case Attr(fact.attr):
+      of Color:
+        discard unwrap(fact.value, string)
+      of LeftOf, Height:
+        discard unwrap(fact.value, int)
+      else:
+        discard
+
 test "creating a ruleset":
   let rules =
     ruleset:

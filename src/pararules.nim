@@ -844,4 +844,4 @@ macro initSession*(dataType: type, autoFire: bool = true): untyped =
   quote do:
     initSession[`dataType`, Vars[`dataType`]](autoFire = `autoFire`)
 
-export engine.fireRules, engine.add, engine.queryAll, engine.get
+export engine.fireRules, engine.add, engine.queryAll, engine.get, engine.unwrap

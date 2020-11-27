@@ -443,3 +443,9 @@ proc queryAll*[T, U, MatchT](session: Session[T, MatchT], prod: Production[T, U,
 proc get*[T, U, MatchT](session: Session[T, MatchT], prod: Production[T, U, MatchT], i: int): U =
   let idAttrs = session.leafNodes[prod.name].matchIds[i]
   prod.query(session.leafNodes[prod.name].matches[idAttrs].vars)
+
+proc unwrap*(fact: object, kind: type): kind =
+  for key, val in fact.fieldPairs:
+    when val is kind:
+      return val
+  raise newException(Exception, "The given object has no field of type " & $kind)
