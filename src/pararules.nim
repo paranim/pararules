@@ -92,7 +92,7 @@ proc addCond(dataType: NimNode, vars: OrderedTable[string, VarInfo], prod: NimNo
   quote do:
     engine.add(`prod`, `id`, `attr`, `value`, `extraArg`)
 
-proc parseWhat(name: string, dataType: NimNode, matchType: NimNode, attrs: Table[string, int], types: seq[string], node: NimNode, condNode: NimNode, thenNode: NimNode): NimNode =
+proc parseWhat(name: string, dataType: NimNode, matchType: NimNode, attrs: Table[string, int], types: seq[string], node: NimNode, condNode: NimNode, thenNode: NimNode, thenFinallyNode: NimNode): NimNode =
   var vars: OrderedTable[string, VarInfo]
   for condNum in 0 ..< node.len:
     let child = node[condNum]
@@ -120,7 +120,6 @@ proc parseWhat(name: string, dataType: NimNode, matchType: NimNode, attrs: Table
 
   let
     prod = genSym(nskVar, "prod")
-    callback = genSym(nskLet, "callback")
     query = genSym(nskLet, "query")
     filter = genSym(nskLet, "filter")
     session = ident("session")
@@ -152,31 +151,44 @@ proc parseWhat(name: string, dataType: NimNode, matchType: NimNode, attrs: Table
         quote do:
           let `filter`: proc (`v`: `matchType`): bool = nil
 
+  result = newStmtList()
+
+  var thenFnArg: NimNode
   if thenNode != nil:
     let usedVars = getUsedVars(vars, thenNode)
     let varNode = createVars(usedVars, match)
-    result = newStmtList(quote do:
-      let `callback` = proc (`session`: var Session[`dataType`, `matchType`], `match`: `matchType`, `this`: Production[`dataType`, `tupleType`, `matchType`]) =
+    let thenFnSym = genSym(nskLet, "thenFn")
+    result.add quote do:
+      let `thenFnSym` = proc (`session`: var Session[`dataType`, `matchType`], `this`: Production[`dataType`, `tupleType`, `matchType`], `match`: `matchType`) =
         `session`.insideRule = true
         `varNode`
         `thenNode`
-      `queryLet`
-      `filterLet`
-      var `prod` = initProduction[`dataType`, `tupleType`, `matchType`](`name`, `callback`, `query`, `filter`)
-    )
+    thenFnArg = thenFnSym
   else:
-    result = newStmtList(quote do:
-      `queryLet`
-      `filterLet`
-      var `prod` = initProduction[`dataType`, `tupleType`, `matchType`](`name`, nil, `query`, `filter`)
-    )
+    thenFnArg = quote do: nil
+
+  var thenFinallyFnArg: NimNode
+  if thenFinallyNode != nil:
+    let thenFinallyFnSym = genSym(nskLet, "thenFinallyFn")
+    result.add quote do:
+      let `thenFinallyFnSym` = proc (`session`: var Session[`dataType`, `matchType`], `this`: Production[`dataType`, `tupleType`, `matchType`]) =
+        `session`.insideRule = true
+        `thenFinallyNode`
+    thenFinallyFnArg = thenFinallyFnSym
+  else:
+    thenFinallyFnArg = quote do: nil
+
+  result.add queryLet
+  result.add filterLet
+  result.add quote do:
+    var `prod` = initProduction[`dataType`, `tupleType`, `matchType`](`name`, `thenFnArg`, `thenFinallyFnArg`, `query`, `filter`)
 
   for condNum in 0 ..< node.len:
     let child = node[condNum]
     result.add addCond(datatype, vars, prod, child)
   result.add prod
 
-const blockTypes = ["what", "cond", "then"].toHashSet
+const blockTypes = ["what", "cond", "then", "thenFinally"].toHashSet
 
 macro ruleWithAttrs*(sig: untyped, dataType: untyped, matchType: untyped, attrsNode: typed, typesNode: typed, body: untyped): untyped =
   expectKind(body, nnkStmtList)
@@ -216,7 +228,8 @@ macro ruleWithAttrs*(sig: untyped, dataType: untyped, matchType: untyped, attrsN
     types,
     t["what"],
     if t.hasKey("cond"): t["cond"] else: nil,
-    if t.hasKey("then"): t["then"] else: nil
+    if t.hasKey("then"): t["then"] else: nil,
+    if t.hasKey("thenFinally"): t["thenFinally"] else: nil,
   )
 
 macro rule*(sig: untyped, body: untyped): untyped =

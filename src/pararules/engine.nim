@@ -28,8 +28,10 @@ type
     enabled: bool
 
   # functions
-  CallbackFn[MatchT] = proc (vars: MatchT)
-  SessionCallbackFn[T, U, MatchT] = proc (session: var Session[T, MatchT], vars: MatchT, rule: Production[T, U, MatchT])
+  ThenFn[T, U, MatchT] = proc (session: var Session[T, MatchT], rule: Production[T, U, MatchT], vars: MatchT)
+  WrappedThenFn[MatchT] = proc (vars: MatchT)
+  ThenFinallyFn[T, U, MatchT] = proc (session: var Session[T, MatchT], rule: Production[T, U, MatchT])
+  WrappedThenFinallyFn = proc ()
   QueryFn[MatchT, U] = proc (vars: MatchT): U
   FilterFn[MatchT] = proc (vars: MatchT): bool
   InitMatchFn[MatchT] = proc (ruleName: string): MatchT
@@ -55,7 +57,8 @@ type
     condition: Condition[T, MatchT]
     case nodeType: MemoryNodeType
       of Leaf:
-        callback: CallbackFn[MatchT]
+        thenFn: WrappedThenFn[MatchT]
+        thenFinallyFn: WrappedThenFinallyFn
         trigger: bool
         filter: FilterFn[MatchT]
       else:
@@ -76,7 +79,8 @@ type
     vars: seq[Var]
     shouldTrigger: bool
   Production*[T, U, MatchT] = object
-    callback: SessionCallbackFn[T, U, MatchT]
+    thenFn: ThenFn[T, U, MatchT]
+    thenFinallyFn: ThenFinallyFn[T, U, MatchT]
     conditions: seq[Condition[T, MatchT]]
     query: QueryFn[MatchT, U]
     name: string
@@ -87,6 +91,7 @@ type
     idAttrNodes: ref Table[IdAttr, HashSet[ptr AlphaNode[T, MatchT]]]
     insideRule*: bool
     thenQueue: ref HashSet[tuple[node: ptr MemoryNode[T, MatchT], idAttrs: IdAttrs]]
+    thenFinallyQueue: ref HashSet[ptr MemoryNode[T, MatchT]]
     autoFire: bool
     initMatch: InitMatchFn[MatchT]
 
@@ -161,9 +166,12 @@ proc add*[T, U, MatchT](session: Session[T, MatchT], production: Production[T, U
     var memNode = MemoryNode[T, MatchT](parent: joinNode, nodeType: if i == last: Leaf else: Partial, condition: condition, lastMatchId: -1)
     if memNode.nodeType == Leaf:
       memNode.filter = production.filter
-      if production.callback != nil:
+      if production.thenFn != nil:
         var sess = session
-        memNode.callback = proc (vars: MatchT) = production.callback(sess, vars, production)
+        memNode.thenFn = proc (vars: MatchT) = production.thenFn(sess, production, vars)
+      if production.thenFinallyFn != nil:
+        var sess = session
+        memNode.thenFinallyFn = proc () = production.thenFinallyFn(sess, production)
       if session.leafNodes.hasKey(production.name):
         raise newException(Exception, production.name & " already exists in session")
       session.leafNodes[production.name] = memNode
@@ -248,13 +256,19 @@ proc leftActivation[T, MatchT](session: var Session[T, MatchT], node: var Memory
     match.enabled = node.nodeType != Leaf or node.filter == nil or node.filter(vars)
     node.matchIds[match.id] = idAttrs
     node.matches[idAttrs] = match
-    if node.nodeType == Leaf and node.trigger and node.callback != nil:
-      session.thenQueue[].incl((node.addr, idAttrs))
+    if node.nodeType == Leaf and node.trigger:
+      if node.thenFn != nil:
+        session.thenQueue[].incl((node.addr, idAttrs))
+      if node.thenFinallyFn != nil:
+        session.thenFinallyQueue[].incl(node.addr)
     node.parent.oldIdAttrs.incl(idAttr)
   of Retract:
     node.matchIds.del(node.matches[idAttrs].id)
     node.matches.del(idAttrs)
     node.parent.oldIdAttrs.excl(idAttr)
+    if node.nodeType == Leaf:
+      if node.thenFinallyFn != nil:
+        session.thenFinallyQueue[].incl(node.addr)
   # pass the token down the chain
   if node.nodeType != Leaf:
     session.leftActivation(node.child, idAttrs, vars, token)
@@ -304,20 +318,30 @@ proc rightActivation[T, MatchT](session: var Session[T, MatchT], node: var Alpha
       session.rightActivation(child, idAttr, token)
 
 proc fireRules*[T, MatchT](session: var Session[T, MatchT]) =
-  # find all nodes with `then` blocks that need executed
-  var thenQueue: seq[(ptr MemoryNode[T, MatchT], MatchT)]
-  for (node, idAttrs) in session.thenQueue[].items:
+  if session.insideRule:
+    return
+  let thenQueue = session.thenQueue[].toSeq
+  let thenFinallyQueue = session.thenFinallyQueue[].toSeq
+  if thenQueue.len == 0 and thenFinallyQueue.len == 0:
+    return
+  # reset state
+  session.thenQueue[].clear
+  session.thenFinallyQueue[].clear
+  for (node, idAttrs) in thenQueue:
     node.trigger = false
+  # find all nodes with `then` blocks that need executed
+  var thenQueueFiltered: seq[(ptr MemoryNode[T, MatchT], MatchT)]
+  for (node, idAttrs) in thenQueue:
     if node.matches.hasKey(idAttrs):
       let match = node.matches[idAttrs]
       if match.enabled:
-        thenQueue.add((node, match.vars))
-  session.thenQueue[].clear
-  if thenQueue.len == 0:
-    return
+        thenQueueFiltered.add((node, match.vars))
   # execute `then` blocks
-  for (node, vars) in thenQueue:
-    node[].callback(vars)
+  for (node, vars) in thenQueueFiltered:
+    node[].thenFn(vars)
+  # execute `thenFinally` blocks
+  for node in thenFinallyQueue:
+    node[].thenFinallyFn()
   # recur because there may be new `then` blocks to execute
   session.fireRules()
 
@@ -362,7 +386,7 @@ proc insertFact*[T, MatchT](session: var Session[T, MatchT], fact: Fact[T]) =
   var nodes = initHashSet[ptr AlphaNode[T, MatchT]](initialSize = 4)
   getAlphaNodesForFact(session, session.alphaNode, fact, true, nodes)
   session.upsertFact(fact, nodes)
-  if session.autoFire and not session.insideRule:
+  if session.autoFire:
     session.fireRules()
 
 proc retractFact*[T, MatchT](session: var Session[T, MatchT], fact: Fact[T]) =
@@ -392,12 +416,15 @@ proc initSession*[T, MatchT](autoFire: bool = true, initMatch: InitMatchFn[Match
   result.idAttrNodes = newTable[IdAttr, HashSet[ptr AlphaNode[T, MatchT]]]()
   new result.thenQueue
   result.thenQueue[] = initHashSet[(ptr MemoryNode[T, MatchT], IdAttrs)]()
+  new result.thenFinallyQueue
+  result.thenFinallyQueue[] = initHashSet[ptr MemoryNode[T, MatchT]]()
   result.autoFire = autoFire
   result.initMatch = initMatch
 
-proc initProduction*[T, U, MatchT](name: string, cb: SessionCallbackFn[T, U, MatchT], query: QueryFn[MatchT, U], filter: FilterFn[MatchT]): Production[T, U, MatchT] =
+proc initProduction*[T, U, MatchT](name: string, thenFn: ThenFn[T, U, MatchT], thenFinallyFn: ThenFinallyFn[T, U, MatchT], query: QueryFn[MatchT, U], filter: FilterFn[MatchT]): Production[T, U, MatchT] =
   result.name = name
-  result.callback = cb
+  result.thenFn = thenFn
+  result.thenFinallyFn = thenFinallyFn
   result.query = query
   result.filter = filter
 

@@ -3,11 +3,14 @@ import pararules
 import tables, sets
 
 type
+  People = seq[tuple[id: int, color: string, leftOf: int, height: int]]
   Id* = enum
     Alice, Bob, Charlie, David, George,
-    Seth, Thomas, Xavier, Yair, Zach
+    Seth, Thomas, Xavier, Yair, Zach,
+    Derived,
   Attr* = enum
-    Color, LeftOf, RightOf, Height, On, Self
+    Color, LeftOf, RightOf, Height, On, Self,
+    AllPeople,
 
 schema Fact(Id, Attr):
   Color: string
@@ -16,6 +19,7 @@ schema Fact(Id, Attr):
   Height: int
   On: string
   Self: Id
+  AllPeople: People
 
 proc `==`(a: int, b: Id): bool =
   a == b.ord
@@ -711,6 +715,47 @@ test "avoid unnecessary rule firings":
 
   check count == 3
 
+test "thenFinally":
+  var triggerCount = 0
+  var allPeople: People
+  let rules =
+    ruleset:
+      rule getPerson(Fact):
+        what:
+          (id, Color, color)
+          (id, LeftOf, leftOf)
+          (id, Height, height)
+        thenFinally:
+          let people = session.queryAll(this)
+          session.insert(Derived, AllPeople, people)
+      rule allPeople(Fact):
+        what:
+          (Derived, AllPeople, people)
+        then:
+          allPeople = people
+          triggerCount += 1
+
+  var session = initSession(Fact, autoFire = false)
+  for r in rules.fields:
+    session.add(r)
+
+  session.insert(Bob, Color, "blue")
+  session.insert(Bob, LeftOf, Zach)
+  session.insert(Bob, Height, 72)
+  session.insert(Alice, Color, "blue")
+  session.insert(Alice, LeftOf, Zach)
+  session.insert(Alice, Height, 72)
+  session.fireRules()
+
+  check allPeople.len == 2
+  check triggerCount == 1
+
+  session.retract(Alice, Color)
+  session.fireRules()
+
+  check allPeople.len == 1
+  check triggerCount == 2
+
 # this one is not used...
 # it's just here to make sure we can define
 # multiple schemas in one module
@@ -721,3 +766,4 @@ schema Stuff(Id, Attr):
   Height: float
   On: string
   Self: Id
+  AllPeople: People
