@@ -29,7 +29,7 @@ type
 
   # functions
   CallbackFn[MatchT] = proc (vars: MatchT)
-  SessionCallbackFn[T, MatchT] = proc (session: var Session[T, MatchT], vars: MatchT)
+  SessionCallbackFn[T, U, MatchT] = proc (session: var Session[T, MatchT], vars: MatchT, rule: Production[T, U, MatchT])
   QueryFn[MatchT, U] = proc (vars: MatchT): U
   FilterFn[MatchT] = proc (vars: MatchT): bool
   InitMatchFn[MatchT] = proc (ruleName: string): MatchT
@@ -76,7 +76,7 @@ type
     vars: seq[Var]
     shouldTrigger: bool
   Production*[T, U, MatchT] = object
-    callback: SessionCallbackFn[T, MatchT]
+    callback: SessionCallbackFn[T, U, MatchT]
     conditions: seq[Condition[T, MatchT]]
     query: QueryFn[MatchT, U]
     name: string
@@ -163,7 +163,7 @@ proc add*[T, U, MatchT](session: Session[T, MatchT], production: Production[T, U
       memNode.filter = production.filter
       if production.callback != nil:
         var sess = session
-        memNode.callback = proc (vars: MatchT) = production.callback(sess, vars)
+        memNode.callback = proc (vars: MatchT) = production.callback(sess, vars, production)
       if session.leafNodes.hasKey(production.name):
         raise newException(Exception, production.name & " already exists in session")
       session.leafNodes[production.name] = memNode
@@ -395,7 +395,7 @@ proc initSession*[T, MatchT](autoFire: bool = true, initMatch: InitMatchFn[Match
   result.autoFire = autoFire
   result.initMatch = initMatch
 
-proc initProduction*[T, U, MatchT](name: string, cb: SessionCallbackFn[T, MatchT], query: QueryFn[MatchT, U], filter: FilterFn[MatchT]): Production[T, U, MatchT] =
+proc initProduction*[T, U, MatchT](name: string, cb: SessionCallbackFn[T, U, MatchT], query: QueryFn[MatchT, U], filter: FilterFn[MatchT]): Production[T, U, MatchT] =
   result.name = name
   result.callback = cb
   result.query = query

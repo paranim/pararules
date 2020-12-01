@@ -124,6 +124,8 @@ proc parseWhat(name: string, dataType: NimNode, matchType: NimNode, attrs: Table
     query = genSym(nskLet, "query")
     filter = genSym(nskLet, "filter")
     session = ident("session")
+    match = ident("match")
+    this = ident("this")
 
   let queryLet =
     block:
@@ -152,10 +154,9 @@ proc parseWhat(name: string, dataType: NimNode, matchType: NimNode, attrs: Table
 
   if thenNode != nil:
     let usedVars = getUsedVars(vars, thenNode)
-    let v = genSym(nskParam, "v")
-    let varNode = createVars(usedVars, v)
+    let varNode = createVars(usedVars, match)
     result = newStmtList(quote do:
-      let `callback` = proc (`session`: var Session[`dataType`, `matchType`], `v`: `matchType`) =
+      let `callback` = proc (`session`: var Session[`dataType`, `matchType`], `match`: `matchType`, `this`: Production[`dataType`, `tupleType`, `matchType`]) =
         `session`.insideRule = true
         `varNode`
         `thenNode`
