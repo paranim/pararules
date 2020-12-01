@@ -756,6 +756,55 @@ test "thenFinally":
   check allPeople.len == 1
   check triggerCount == 2
 
+type
+  Id2 = enum
+    Number,
+  Attr2 = enum
+    Any, IsPositive, Doubled, Combined,
+  IntBoolTuple = (int, bool)
+
+schema Fact2(Id2, Attr2):
+  Any: int
+  IsPositive: bool
+  Doubled: int
+  Combined: IntBoolTuple
+
+# based on https://github.com/raquo/Airstream#frp-glitches
+test "frp glitch":
+  var output: seq[(int, bool)]
+  let rules =
+    ruleset:
+      rule isPositive(Fact2):
+        what:
+          (Number, Any, anyNum)
+        then:
+          session.insert(Number, IsPositive, anyNum > 0)
+      rule doubledNumbers(Fact2):
+        what:
+          (Number, Any, anyNum)
+        then:
+          session.insert(Number, Doubled, anyNum * 2)
+      rule combined(Fact2):
+        what:
+          (Number, IsPositive, isPositive)
+          (Number, Doubled, doubled)
+        then:
+          session.insert(Number, Combined, (doubled, isPositive))
+      rule printCombined(Fact2):
+        what:
+          (Number, Combined, combined)
+        then:
+          output.add(combined)
+
+  var session = initSession(Fact2)
+  for r in rules.fields:
+    session.add(r)
+
+  session.insert(Number, Any, -1)
+  session.insert(Number, Any, 1)
+
+  check output == @[(-2, false), (2, true)]
+
 # this one is not used...
 # it's just here to make sure we can define
 # multiple schemas in one module
