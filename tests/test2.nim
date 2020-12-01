@@ -8,7 +8,7 @@ randomize()
 
 type
   Id = enum
-    Global, Player,
+    Global, Player, Derived,
   Attr = enum
     DeltaTime, TotalTime,
     X, Y,
@@ -17,7 +17,9 @@ type
     Width, Height,
     XVelocity, YVelocity,
     XChange, YChange,
+    AllCharacters,
   IntSet = HashSet[int]
+  Characters = seq[tuple[id: int, x: float, y: float]]
 
 schema Fact(Id, Attr):
   DeltaTime: float
@@ -33,6 +35,7 @@ schema Fact(Id, Attr):
   YVelocity: float
   XChange: float
   YChange: float
+  AllCharacters: Characters
 
 proc `==`(a: int, b: Id): bool =
   a == b.ord
@@ -288,6 +291,89 @@ test "generating ids":
     nextId += 1
 
   check session.findAll(rule1).len == 5
+
+test "derived facts":
+  var allChars: Characters
+  let rules =
+    ruleset:
+      rule getCharacter(Fact):
+        what:
+          (id, X, x)
+          (id, Y, y)
+        thenFinally:
+          let chars = session.queryAll(this)
+          session.insert(Derived, AllCharacters, chars)
+      rule printAllCharacters(Fact):
+        what:
+          (Derived, AllCharacters, chars)
+        then:
+          allChars = chars
+
+  var session = initSession(Fact, autoFire = false)
+  for r in rules.fields:
+    session.add(r)
+
+  var nextId = Id.high.ord + 1
+
+  for _ in 0 ..< 5:
+    session.insert(nextId, X, rand(50.0))
+    session.insert(nextId, Y, rand(50.0))
+    nextId += 1
+
+  session.fireRules()
+
+  check allChars.len == 5
+
+  session.retract(3, X)
+  session.retract(3, Y)
+  session.fireRules()
+
+  check allChars.len == 4
+
+test "serializing a session":
+  let rules =
+    ruleset:
+      rule getCharacter(Fact):
+        what:
+          (id, X, x)
+          (id, Y, y)
+        thenFinally:
+          let chars = session.queryAll(this)
+          session.insert(Derived, AllCharacters, chars)
+      rule printAllCharacters(Fact):
+        what:
+          (Derived, AllCharacters, chars)
+
+  var session = initSession(Fact, autoFire = false)
+  for r in rules.fields:
+    session.add(r)
+
+  var nextId = Id.high.ord + 1
+
+  for _ in 0 ..< 5:
+    session.insert(nextId, X, rand(50.0))
+    session.insert(nextId, Y, rand(50.0))
+    nextId += 1
+
+  session.fireRules()
+
+  let facts = session.queryAll()
+
+  for fact in facts:
+    case Attr(fact.attr):
+      of X, Y:
+        discard unwrap(fact.value, float)
+      of AllCharacters:
+        discard unwrap(fact.value, Characters)
+      else:
+        discard
+
+  var primaryFacts: seq[(int, int, Fact)]
+  for fact in facts:
+    if fact.id != Derived.ord:
+      primaryFacts.add(fact)
+
+  check primaryFacts.len == facts.len - 1
 
 # custom match type
 

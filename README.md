@@ -372,6 +372,154 @@ rule getCharacter(Fact):
 
 You need to write `id != Player.ord` instead, because pararules transforms all ids to normal integers and gives them back that way.
 
+## Derived facts
+
+Sometimes we want to make a rule that receives a *collection* of facts. This is done by creating facts that are derived from other facts.
+
+If you want to create a fact that contains all characters, one clever way to do it is to run a query in the `getCharacter` rule, and insert the result as a new fact:
+
+```nim
+rule getCharacter(Fact):
+  what:
+    (id, X, x)
+    (id, Y, y)
+  then:
+    let chars = session.queryAll(this)
+    session.insert(Derived, AllCharacters, chars)
+rule printAllCharacters(Fact):
+  what:
+    (Derived, AllCharacters, chars)
+  then:
+    echo "All characters: ", chars
+```
+
+The special `this` symbol refers to the rule itself, so it's the same as running `session.queryAll(rules.getCharacter)`. Every time *any* character is updated, the query is run again and the derived fact is updated.
+
+For this to work, we need to add a few things to the types at the top:
+
+```nim
+type
+  # update the enums
+  Id = enum
+    # ...
+    Derived
+  Attr = enum
+    # ...
+    AllCharacters
+  # define a type to store the query results
+  Characters = seq[tuple[id: int, x: float, y: float]]
+
+# update the schema
+schema Fact(Id, Attr):
+  # ...
+  AllCharacters: Characters
+```
+
+When we insert our random enemies, it seems to work:
+
+```nim
+var nextId = Id.high.ord + 1
+
+for _ in 0 ..< 5:
+  session.insert(nextId, X, rand(50.0))
+  session.insert(nextId, Y, rand(50.0))
+  nextId += 1
+# All characters: @[(id: 3, x: 9.394868845262195, y: 25.43175850160218), (id: 4, x: 11.17467397291547, y: 41.71452255154022), (id: 7, x: 30.03014845607234, y: 48.31479800236611), (id: 5, x: 0.5064720243960097, y: 27.21672010097956), (id: 6, x: 8.553239146114377, y: 9.315216984770858)]
+```
+
+But what happens if we retract one?
+
+```nim
+session.retract(3, X)
+session.retract(3, Y)
+```
+
+It didn't print, which means the `AllCharacters` fact hasn't been updated! This is because `then` blocks only run on insertions, not retractions. After all, if facts pertinent to a rule are retracted, the match will be incomplete, and there will be nothing to bind the symbols from the `what` block to.
+
+The solution is to use `thenFinally`:
+
+```nim
+rule getCharacter(Fact):
+  what:
+    (id, X, x)
+    (id, Y, y)
+  thenFinally:
+    let chars = session.queryAll(this)
+    session.insert(Derived, AllCharacters, chars)
+```
+
+A `thenFinally` block runs when a rule's matches are changed at all, including from retractions. This also means you won't have access to the bindings from the `what` block, so if you want to run code on each individual match, you need to use a normal `then` block before it.
+
+One last thing: it is *highly* recommended that you use reference types like `ref seq`, rather than value types like `seq`, unless you are sure they will be small. Many copies of facts are made inside the session, so this could be a significant performance problem if you store collections that copy by value.
+
+The example above could be changed to declare the `Characters` type like this:
+
+```nim
+type
+  # ...
+  Characters = ref seq[tuple[id: int, x: float, y: float]]
+```
+
+And then the rule could be changed like this:
+
+```nim
+rule getCharacter(Fact):
+  what:
+    (id, X, x)
+    (id, Y, y)
+  thenFinally:
+    var chars: Characters = nil
+    new chars
+    chars[] = session.queryAll(this)
+    session.insert(Derived, AllCharacters, chars)
+```
+
+## Serializing a session
+
+To save a session to the disk or send it over a network, we need to serialize it somehow. It wouldn't be a good idea to directly serialize the session. It would prevent you from updating your rules, or possibly even the version of this library, due to all the implementation details contained in the session after deserializing it.
+
+Instead, it makes more sense to just serialize the *facts*. There is an overload of `queryAll` that returns a sequence of all the individual facts that were inserted:
+
+```nim
+let facts = session.queryAll()
+echo facts
+# @[(id: 2, attr: 13, value: Fact(...)), (id: 7, attr: 3, value: Fact(...)), (id: 5, attr: 2, value: Fact(...)), (id: 4, attr: 3, value: Fact(...)), (id: 6, attr: 3, value: Fact(...)), (id: 5, attr: 3, value: Fact(...)), (id: 6, attr: 2, value: Fact(...)), (id: 4, attr: 2, value: Fact(...)), (id: 3, attr: 3, value: Fact(...)), (id: 7, attr: 2, value: Fact(...)), (id: 3, attr: 2, value: Fact(...))]
+```
+
+As you can see, it returns the data as `(int, int, Fact)` tuples. The id and attr have been converted to integers, but you can cast them back to enums:
+
+```nim
+let fact = facts[0]
+echo Id(fact.id)
+echo Attr(fact.attr)
+```
+
+The value is of the type we defined with the `schema` macro, which is an object variant. You can pull out the value within it using `unwrap`:
+
+```nim
+for fact in facts:
+  case Attr(fact.attr):
+    of X, Y:
+      echo unwrap(fact.value, float)
+    of AllCharacters:
+      echo unwrap(fact.value, Characters)
+    else:
+      discard
+```
+
+Notice that it includes the `AllCharacters` derived fact that we made before. There is no need to serialize derived facts -- they can be derived later, so it's a waste of space. We can filter them out before serializing:
+
+```nim
+var primaryFacts: seq[(int, int, Fact)]
+for fact in facts:
+  if fact.id != Derived.ord:
+    primaryFacts.add(fact)
+```
+
+How you go about serializing the facts is up to you. When you deserialize them later, simply `insert` them into your session again.
+
+Keep in mind that, if you save the ids and attrs as integers, they need to remain stable -- that is, you can't move items around in those enums, because they won't match up when you deserialize your facts later.
+
 ## Performance
 
 By default, rules are fired after every `insert` call. This can be inefficient; you should normally only fire the rules once per frame. You can disable this when creating your session:
@@ -465,9 +613,7 @@ Advantages compared to Clara:
 Disadvantages compared to Clara:
 
 * Clara supports [truth maintenance](https://www.clara-rules.org/docs/truthmaint/), which can be a very useful feature in some domains. I don't plan on supporting this in pararules because I'm not convinced it's that useful for game dev.
-* Clara supports [accumulators](https://www.clara-rules.org/docs/accumulators/) for gathering multiple facts together for use in a rule. I'm not sure if I want to support something like this yet.
 * Clara's sessions are completely immutable data structures. This makes it really simple to hold on to old versions of a session, in order to implement time rewinding or as a useful debugging tool. I want to implement this in pararules eventually.
-* Clara's sessions can be serialized and deserialized. I'd like to support this too.
 
 ## Acknowledgements
 
