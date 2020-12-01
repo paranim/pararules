@@ -176,6 +176,8 @@ proc parseWhat(name: string, dataType: NimNode, matchType: NimNode, attrs: Table
     result.add addCond(datatype, vars, prod, child)
   result.add prod
 
+const blockTypes = ["what", "cond", "then"].toHashSet
+
 macro ruleWithAttrs*(sig: untyped, dataType: untyped, matchType: untyped, attrsNode: typed, typesNode: typed, body: untyped): untyped =
   expectKind(body, nnkStmtList)
   result = newStmtList()
@@ -184,7 +186,10 @@ macro ruleWithAttrs*(sig: untyped, dataType: untyped, matchType: untyped, attrsN
     expectKind(child, nnkCall)
     let id = child[0]
     expectKind(id, nnkIdent)
-    t[id.strVal] = child[1]
+    let blockName = id.strVal
+    if not blockTypes.contains(blockName):
+      raise newException(Exception, "Unrecognized block name: " & blockName)
+    t[blockName] = child[1]
 
   let attrsImpl = attrsNode.getImpl
   expectKind(attrsImpl, nnkBracket)
