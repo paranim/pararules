@@ -317,6 +317,11 @@ test "query all facts":
   session.insert(Charlie, LeftOf, Alice)
   session.insert(Charlie, Height, 72)
 
+  # insert and retract a fact to make sure
+  # it isn't returned by queryAll
+  session.insert(Zach, Color, "blue")
+  session.retract(Zach, Color)
+
   let facts = session.queryAll()
   check facts.len == 9
 

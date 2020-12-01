@@ -291,6 +291,8 @@ proc rightActivation[T, MatchT](session: var Session[T, MatchT], node: var Alpha
     node.facts[idAttr.id].del(idAttr.attr)
     let missing = session.idAttrNodes[idAttr].missingOrExcl(node.addr)
     assert not missing
+    if session.idAttrNodes[idAttr].len == 0:
+      session.idAttrNodes.del(idAttr)
   of Update:
     assert node.facts[idAttr.id][idAttr.attr] == token.oldFact
     node.facts[idAttr.id][idAttr.attr] = token.fact
