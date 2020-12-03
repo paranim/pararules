@@ -45,21 +45,21 @@ proc wrap(parentNode: NimNode, dataType: NimNode, field: Field): NimNode =
             `checkProc`(`attrName`, `dataNode`.kind.ord)
           `dataNode`
 
-proc createVars(vars: OrderedTable[string, VarInfo], paramNode: NimNode): NimNode =
+proc destructureMatch(vars: OrderedTable[string, VarInfo], paramNode: NimNode): NimNode =
   result = newStmtList()
   for (varName, varInfo) in vars.pairs:
     let typeField = ident(typePrefix & $varInfo.typeNum)
-    result.add(newVarStmt(
+    result.add(newLetStmt(
       newIdentNode(varName),
       quote do:
         `paramNode`[`varName`].`typeField`
     ))
 
-proc createVars(vars: seq[string], paramNode: NimNode): NimNode =
+proc destructureMatch(vars: seq[string], paramNode: NimNode): NimNode =
   result = newStmtList()
   for varName in vars:
     let varIdent = ident(varName)
-    result.add(newVarStmt(
+    result.add(newLetStmt(
       varIdent,
       quote do:
         `paramNode`.`varIdent`
@@ -153,7 +153,7 @@ proc parseWhat(name: string, dataType: NimNode, matchType: NimNode, attrs: Table
       let v = genSym(nskParam, "v")
       if condBody != nil:
         let usedVars = getUsedVars(vars, condNode)
-        let varNode = createVars(usedVars, v)
+        let varNode = destructureMatch(usedVars, v)
         quote do:
           let `condFn` = proc (`v`: `matchType`): bool =
             `varNode`
@@ -170,7 +170,7 @@ proc parseWhat(name: string, dataType: NimNode, matchType: NimNode, attrs: Table
     var varNames: seq[string]
     for (varName, _) in usedVars.pairs:
       varNames.add(varName)
-    let varNode = createVars(varNames, match)
+    let varNode = destructureMatch(varNames, match)
     let thenFnSym = genSym(nskLet, "thenFn")
     result.add quote do:
       let `thenFnSym` = proc (`session`: var Session[`dataType`, `matchType`], `this`: Production[`dataType`, `tupleType`, `matchType`], `match`: `tupleType`) =
