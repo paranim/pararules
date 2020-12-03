@@ -89,7 +89,7 @@ type
     alphaNode: AlphaNode[T, MatchT]
     leafNodes: ref Table[string, MemoryNode[T, MatchT]]
     idAttrNodes: ref Table[IdAttr, HashSet[ptr AlphaNode[T, MatchT]]]
-    insideRule*: bool
+    insideRule: bool
     thenQueue: ref HashSet[tuple[node: ptr MemoryNode[T, MatchT], idAttrs: IdAttrs]]
     thenFinallyQueue: ref HashSet[ptr MemoryNode[T, MatchT]]
     autoFire: bool
