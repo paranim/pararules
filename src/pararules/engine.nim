@@ -33,7 +33,7 @@ type
   ThenFinallyFn[T, U, MatchT] = proc (session: var Session[T, MatchT], rule: Production[T, U, MatchT])
   WrappedThenFinallyFn = proc ()
   QueryFn[MatchT, U] = proc (vars: MatchT): U
-  FilterFn[MatchT] = proc (vars: MatchT): bool
+  CondFn[MatchT] = proc (vars: MatchT): bool
   InitMatchFn[MatchT] = proc (ruleName: string): MatchT
 
   # alpha network
@@ -57,10 +57,10 @@ type
     condition: Condition[T, MatchT]
     case nodeType: MemoryNodeType
       of Leaf:
+        condFn: CondFn[MatchT]
         thenFn: WrappedThenFn[MatchT]
         thenFinallyFn: WrappedThenFinallyFn
         trigger: bool
-        filter: FilterFn[MatchT]
       else:
         nil
   JoinNode[T, MatchT] = ref object
@@ -79,12 +79,12 @@ type
     vars: seq[Var]
     shouldTrigger: bool
   Production*[T, U, MatchT] = object
+    name: string
+    conditions: seq[Condition[T, MatchT]]
+    queryFn: QueryFn[MatchT, U]
+    condFn: CondFn[MatchT]
     thenFn: ThenFn[T, U, MatchT]
     thenFinallyFn: ThenFinallyFn[T, U, MatchT]
-    conditions: seq[Condition[T, MatchT]]
-    query: QueryFn[MatchT, U]
-    name: string
-    filter: FilterFn[MatchT]
   Session*[T, MatchT] = object
     alphaNode: AlphaNode[T, MatchT]
     leafNodes: ref Table[string, MemoryNode[T, MatchT]]
@@ -165,7 +165,7 @@ proc add*[T, U, MatchT](session: Session[T, MatchT], production: Production[T, U
       if isAncestor(x, y): 1 else: -1)
     var memNode = MemoryNode[T, MatchT](parent: joinNode, nodeType: if i == last: Leaf else: Partial, condition: condition, lastMatchId: -1)
     if memNode.nodeType == Leaf:
-      memNode.filter = production.filter
+      memNode.condFn = production.condFn
       if production.thenFn != nil:
         var sess = session
         memNode.thenFn = proc (vars: MatchT) = production.thenFn(sess, production, vars)
@@ -253,7 +253,7 @@ proc leftActivation[T, MatchT](session: var Session[T, MatchT], node: var Memory
         node.lastMatchId += 1
         Match[MatchT](id: node.lastMatchId)
     match.vars = vars
-    match.enabled = node.nodeType != Leaf or node.filter == nil or node.filter(vars)
+    match.enabled = node.nodeType != Leaf or node.condFn == nil or node.condFn(vars)
     node.matchIds[match.id] = idAttrs
     node.matches[idAttrs] = match
     if node.nodeType == Leaf and node.trigger:
@@ -421,12 +421,12 @@ proc initSession*[T, MatchT](autoFire: bool = true, initMatch: InitMatchFn[Match
   result.autoFire = autoFire
   result.initMatch = initMatch
 
-proc initProduction*[T, U, MatchT](name: string, thenFn: ThenFn[T, U, MatchT], thenFinallyFn: ThenFinallyFn[T, U, MatchT], query: QueryFn[MatchT, U], filter: FilterFn[MatchT]): Production[T, U, MatchT] =
+proc initProduction*[T, U, MatchT](name: string, queryFn: QueryFn[MatchT, U], condFn: CondFn[MatchT], thenFn: ThenFn[T, U, MatchT], thenFinallyFn: ThenFinallyFn[T, U, MatchT]): Production[T, U, MatchT] =
   result.name = name
+  result.queryFn = queryFn
+  result.condFn = condFn
   result.thenFn = thenFn
   result.thenFinallyFn = thenFinallyFn
-  result.query = query
-  result.filter = filter
 
 proc matchesParams[I, T, MatchT](vars: MatchT, params: array[I, (string, T)]): bool =
   for (varName, val) in params:
@@ -467,11 +467,11 @@ proc queryAll*[T, MatchT](session: Session[T, MatchT]): seq[tuple[id: int, attr:
 proc queryAll*[T, U, MatchT](session: Session[T, MatchT], prod: Production[T, U, MatchT]): seq[U] =
   for match in session.leafNodes[prod.name].matches.values:
     if match.enabled:
-      result.add(prod.query(match.vars))
+      result.add(prod.queryFn(match.vars))
 
 proc get*[T, U, MatchT](session: Session[T, MatchT], prod: Production[T, U, MatchT], i: int): U =
   let idAttrs = session.leafNodes[prod.name].matchIds[i]
-  prod.query(session.leafNodes[prod.name].matches[idAttrs].vars)
+  prod.queryFn(session.leafNodes[prod.name].matches[idAttrs].vars)
 
 proc unwrap*(fact: object, kind: type): kind =
   for key, val in fact.fieldPairs:

@@ -120,13 +120,13 @@ proc parseWhat(name: string, dataType: NimNode, matchType: NimNode, attrs: Table
 
   let
     prod = genSym(nskVar, "prod")
-    query = genSym(nskLet, "query")
-    filter = genSym(nskLet, "filter")
+    queryFn = genSym(nskLet, "queryFn")
+    condFn = genSym(nskLet, "condFn")
     session = ident("session")
     match = ident("match")
     this = ident("this")
 
-  let queryLet =
+  let queryFnLet =
     block:
       let v = genSym(nskParam, "v")
       var queryBody = newNimNode(nnkTupleConstr)
@@ -134,26 +134,26 @@ proc parseWhat(name: string, dataType: NimNode, matchType: NimNode, attrs: Table
         let typeField = ident(typePrefix & $varInfo.typeNum)
         queryBody.add(newNimNode(nnkExprColonExpr).add(ident(varName)).add(quote do: `v`[`varName`].`typeField`))
       quote do:
-        let `query` = proc (`v`: `matchType`): `tupleType` =
+        let `queryFn` = proc (`v`: `matchType`): `tupleType` =
           `queryBody`
 
-  let filterLet =
+  let condFnLet =
     block:
       let v = genSym(nskParam, "v")
       if condBody != nil:
         let usedVars = getUsedVars(vars, condNode)
         let varNode = createVars(usedVars, v)
         quote do:
-          let `filter` = proc (`v`: `matchType`): bool =
+          let `condFn` = proc (`v`: `matchType`): bool =
             `varNode`
             `condBody`
       else:
         quote do:
-          let `filter`: proc (`v`: `matchType`): bool = nil
+          let `condFn`: proc (`v`: `matchType`): bool = nil
 
   result = newStmtList()
 
-  var thenFnArg: NimNode
+  var thenFn: NimNode
   if thenNode != nil:
     let usedVars = getUsedVars(vars, thenNode)
     let varNode = createVars(usedVars, match)
@@ -163,25 +163,25 @@ proc parseWhat(name: string, dataType: NimNode, matchType: NimNode, attrs: Table
         `session`.insideRule = true
         `varNode`
         `thenNode`
-    thenFnArg = thenFnSym
+    thenFn = thenFnSym
   else:
-    thenFnArg = quote do: nil
+    thenFn = quote do: nil
 
-  var thenFinallyFnArg: NimNode
+  var thenFinallyFn: NimNode
   if thenFinallyNode != nil:
     let thenFinallyFnSym = genSym(nskLet, "thenFinallyFn")
     result.add quote do:
       let `thenFinallyFnSym` = proc (`session`: var Session[`dataType`, `matchType`], `this`: Production[`dataType`, `tupleType`, `matchType`]) =
         `session`.insideRule = true
         `thenFinallyNode`
-    thenFinallyFnArg = thenFinallyFnSym
+    thenFinallyFn = thenFinallyFnSym
   else:
-    thenFinallyFnArg = quote do: nil
+    thenFinallyFn = quote do: nil
 
-  result.add queryLet
-  result.add filterLet
+  result.add queryFnLet
+  result.add condFnLet
   result.add quote do:
-    var `prod` = initProduction[`dataType`, `tupleType`, `matchType`](`name`, `thenFnArg`, `thenFinallyFnArg`, `query`, `filter`)
+    var `prod` = initProduction[`dataType`, `tupleType`, `matchType`](`name`, `queryFn`, `condFn`, `thenFn`, `thenFinallyFn`)
 
   for condNum in 0 ..< node.len:
     let child = node[condNum]
@@ -266,8 +266,8 @@ macro ruleset*(rules: untyped): untyped =
 
 ## find, findAll, query
 
-proc getDataType(prod: NimNode): NimNode =
-  let impl = prod.getTypeImpl
+proc getDataType(session: NimNode): NimNode =
+  let impl = session.getTypeImpl
   expectKind(impl, nnkObjectTy)
   let recList = impl[2]
   expectKind(recList, nnkRecList)
@@ -290,7 +290,7 @@ proc createParamsArray(dataType: NimNode, args: NimNode): NimNode =
 
 macro find*(session: Session, prod: Production, args: varargs[untyped]): untyped =
   if args.len > 0:
-    let dataType = prod.getDataType
+    let dataType = session.getDataType
     let params = createParamsArray(dataType, args)
     quote do:
       engine.find(`session`, `prod`, `params`)
@@ -300,7 +300,7 @@ macro find*(session: Session, prod: Production, args: varargs[untyped]): untyped
 
 macro findAll*(session: Session, prod: Production, args: varargs[untyped]): untyped =
   if args.len > 0:
-    let dataType = prod.getDataType
+    let dataType = session.getDataType
     let params = createParamsArray(dataType, args)
     quote do:
       engine.findAll(`session`, `prod`, `params`)
@@ -310,7 +310,7 @@ macro findAll*(session: Session, prod: Production, args: varargs[untyped]): unty
 
 macro query*(session: Session, prod: Production, args: varargs[untyped]): untyped =
   if args.len > 0:
-    let dataType = prod.getDataType
+    let dataType = session.getDataType
     let params = createParamsArray(dataType, args)
     quote do:
       engine.get(`session`, `prod`, engine.find(`session`, `prod`, `params`))
