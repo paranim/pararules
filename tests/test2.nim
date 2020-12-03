@@ -82,7 +82,7 @@ test "queries":
   session.insert(Player, Y, 1.0)
 
   let results = session.queryAll(rule2)
-  echo results.len == 1
+  check results.len == 1
 
   let player = session.query(rule2)
   check player.x == 0.0
@@ -416,18 +416,34 @@ test "performance":
   check session.get(rules.getPlayer, indexes[0]).x == 1.0
 
 test "tips":
-  const playerId = Player # just to make sure this works
+  block:
+    var session = initSession(Fact)
 
-  let rule1 =
-    rule getPlayer(Fact):
-      what:
-        (`playerId`, X, x)
-        (`playerId`, Y, y)
+    session.add:
+      rule getCharacter(Fact):
+        what:
+          (id, X, x)
+          (id, Y, y)
+        then:
+          #echo match
+          check match.id == Player.ord
 
-  var session = initSession(Fact)
-  session.add(rule1)
+    session.insert(Player, X, 10.0)
+    session.insert(Player, Y, 25.0)
 
-  session.insert(Player, X, 0f)
-  session.insert(Player, Y, 0f)
+  block:
+    const playerId = Player # just to make sure this works
 
-  check session.findAll(rule1).len == 1
+    let rule1 =
+      rule getPlayer(Fact):
+        what:
+          (`playerId`, X, x)
+          (`playerId`, Y, y)
+
+    var session = initSession(Fact)
+    session.add(rule1)
+
+    session.insert(Player, X, 0f)
+    session.insert(Player, Y, 0f)
+
+    check session.findAll(rule1).len == 1

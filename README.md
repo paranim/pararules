@@ -567,6 +567,23 @@ There are a few downsides:
 
 ## Tips
 
+In `then` blocks, you can use the special `match` symbol to access all the bound values in a single tuple:
+
+```nim
+var session = initSession(Fact)
+
+session.add:
+  rule getCharacter(Fact):
+    what:
+      (id, X, x)
+      (id, Y, y)
+    then:
+      echo match # (id: 1, x: 10.0, y: 25.0)
+
+session.insert(Player, X, 10.0)
+session.insert(Player, Y, 25.0)
+```
+
 If you're trying to debug a `cond` block, keep in mind that you can put whatever arbitrary code you want in there. For example, you can make it print out the values by creating a new scope with `block`, as long as the condition itself is the last thing in that scope:
 
 ```nim

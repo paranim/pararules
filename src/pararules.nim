@@ -55,6 +55,17 @@ proc createVars(vars: OrderedTable[string, VarInfo], paramNode: NimNode): NimNod
         `paramNode`[`varName`].`typeField`
     ))
 
+proc createVars(vars: seq[string], paramNode: NimNode): NimNode =
+  result = newStmtList()
+  for varName in vars:
+    let varIdent = ident(varName)
+    result.add(newVarStmt(
+      varIdent,
+      quote do:
+        `paramNode`.`varIdent`
+    ))
+
+
 proc getVarsInNode(node: NimNode): HashSet[string] =
   if node.isVar:
     result.incl(node.strVal)
@@ -156,10 +167,13 @@ proc parseWhat(name: string, dataType: NimNode, matchType: NimNode, attrs: Table
   var thenFn: NimNode
   if thenNode != nil:
     let usedVars = getUsedVars(vars, thenNode)
-    let varNode = createVars(usedVars, match)
+    var varNames: seq[string]
+    for (varName, _) in usedVars.pairs:
+      varNames.add(varName)
+    let varNode = createVars(varNames, match)
     let thenFnSym = genSym(nskLet, "thenFn")
     result.add quote do:
-      let `thenFnSym` = proc (`session`: var Session[`dataType`, `matchType`], `this`: Production[`dataType`, `tupleType`, `matchType`], `match`: `matchType`) =
+      let `thenFnSym` = proc (`session`: var Session[`dataType`, `matchType`], `this`: Production[`dataType`, `tupleType`, `matchType`], `match`: `tupleType`) =
         `varNode`
         `thenNode`
     thenFn = thenFnSym

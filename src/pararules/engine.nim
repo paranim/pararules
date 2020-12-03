@@ -28,7 +28,7 @@ type
     enabled: bool
 
   # functions
-  ThenFn[T, U, MatchT] = proc (session: var Session[T, MatchT], rule: Production[T, U, MatchT], vars: MatchT)
+  ThenFn[T, U, MatchT] = proc (session: var Session[T, MatchT], rule: Production[T, U, MatchT], vars: U)
   WrappedThenFn[MatchT] = proc (vars: MatchT)
   ThenFinallyFn[T, U, MatchT] = proc (session: var Session[T, MatchT], rule: Production[T, U, MatchT])
   WrappedThenFinallyFn = proc ()
@@ -169,7 +169,7 @@ proc add*[T, U, MatchT](session: Session[T, MatchT], production: Production[T, U
       if production.thenFn != nil:
         var sess = session
         sess.insideRule = true
-        memNode.thenFn = proc (vars: MatchT) = production.thenFn(sess, production, vars)
+        memNode.thenFn = proc (vars: MatchT) = production.thenFn(sess, production, production.matchFn(vars))
       if production.thenFinallyFn != nil:
         var sess = session
         sess.insideRule = true
