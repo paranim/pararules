@@ -160,7 +160,6 @@ proc parseWhat(name: string, dataType: NimNode, matchType: NimNode, attrs: Table
     let thenFnSym = genSym(nskLet, "thenFn")
     result.add quote do:
       let `thenFnSym` = proc (`session`: var Session[`dataType`, `matchType`], `this`: Production[`dataType`, `tupleType`, `matchType`], `match`: `matchType`) =
-        `session`.insideRule = true
         `varNode`
         `thenNode`
     thenFn = thenFnSym
@@ -172,7 +171,6 @@ proc parseWhat(name: string, dataType: NimNode, matchType: NimNode, attrs: Table
     let thenFinallyFnSym = genSym(nskLet, "thenFinallyFn")
     result.add quote do:
       let `thenFinallyFnSym` = proc (`session`: var Session[`dataType`, `matchType`], `this`: Production[`dataType`, `tupleType`, `matchType`]) =
-        `session`.insideRule = true
         `thenFinallyNode`
     thenFinallyFn = thenFinallyFnSym
   else:

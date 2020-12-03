@@ -168,9 +168,11 @@ proc add*[T, U, MatchT](session: Session[T, MatchT], production: Production[T, U
       memNode.condFn = production.condFn
       if production.thenFn != nil:
         var sess = session
+        sess.insideRule = true
         memNode.thenFn = proc (vars: MatchT) = production.thenFn(sess, production, vars)
       if production.thenFinallyFn != nil:
         var sess = session
+        sess.insideRule = true
         memNode.thenFinallyFn = proc () = production.thenFinallyFn(sess, production)
       if session.leafNodes.hasKey(production.name):
         raise newException(Exception, production.name & " already exists in session")
