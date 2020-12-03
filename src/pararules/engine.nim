@@ -32,7 +32,7 @@ type
   WrappedThenFn[MatchT] = proc (vars: MatchT)
   ThenFinallyFn[T, U, MatchT] = proc (session: var Session[T, MatchT], rule: Production[T, U, MatchT])
   WrappedThenFinallyFn = proc ()
-  MatchFn[MatchT, U] = proc (vars: MatchT): U
+  ConvertMatchFn[MatchT, U] = proc (vars: MatchT): U
   CondFn[MatchT] = proc (vars: MatchT): bool
   InitMatchFn[MatchT] = proc (ruleName: string): MatchT
 
@@ -81,7 +81,7 @@ type
   Production*[T, U, MatchT] = object
     name: string
     conditions: seq[Condition[T, MatchT]]
-    matchFn: MatchFn[MatchT, U]
+    convertMatchFn: ConvertMatchFn[MatchT, U]
     condFn: CondFn[MatchT]
     thenFn: ThenFn[T, U, MatchT]
     thenFinallyFn: ThenFinallyFn[T, U, MatchT]
@@ -169,7 +169,7 @@ proc add*[T, U, MatchT](session: Session[T, MatchT], production: Production[T, U
       if production.thenFn != nil:
         var sess = session
         sess.insideRule = true
-        memNode.thenFn = proc (vars: MatchT) = production.thenFn(sess, production, production.matchFn(vars))
+        memNode.thenFn = proc (vars: MatchT) = production.thenFn(sess, production, production.convertMatchFn(vars))
       if production.thenFinallyFn != nil:
         var sess = session
         sess.insideRule = true
@@ -423,9 +423,9 @@ proc initSession*[T, MatchT](autoFire: bool = true, initMatch: InitMatchFn[Match
   result.autoFire = autoFire
   result.initMatch = initMatch
 
-proc initProduction*[T, U, MatchT](name: string, matchFn: MatchFn[MatchT, U], condFn: CondFn[MatchT], thenFn: ThenFn[T, U, MatchT], thenFinallyFn: ThenFinallyFn[T, U, MatchT]): Production[T, U, MatchT] =
+proc initProduction*[T, U, MatchT](name: string, convertMatchFn: ConvertMatchFn[MatchT, U], condFn: CondFn[MatchT], thenFn: ThenFn[T, U, MatchT], thenFinallyFn: ThenFinallyFn[T, U, MatchT]): Production[T, U, MatchT] =
   result.name = name
-  result.matchFn = matchFn
+  result.convertMatchFn = convertMatchFn
   result.condFn = condFn
   result.thenFn = thenFn
   result.thenFinallyFn = thenFinallyFn
@@ -469,11 +469,11 @@ proc queryAll*[T, MatchT](session: Session[T, MatchT]): seq[tuple[id: int, attr:
 proc queryAll*[T, U, MatchT](session: Session[T, MatchT], prod: Production[T, U, MatchT]): seq[U] =
   for match in session.leafNodes[prod.name].matches.values:
     if match.enabled:
-      result.add(prod.matchFn(match.vars))
+      result.add(prod.convertMatchFn(match.vars))
 
 proc get*[T, U, MatchT](session: Session[T, MatchT], prod: Production[T, U, MatchT], i: int): U =
   let idAttrs = session.leafNodes[prod.name].matchIds[i]
-  prod.matchFn(session.leafNodes[prod.name].matches[idAttrs].vars)
+  prod.convertMatchFn(session.leafNodes[prod.name].matches[idAttrs].vars)
 
 proc unwrap*(fact: object, kind: type): kind =
   for key, val in fact.fieldPairs:
