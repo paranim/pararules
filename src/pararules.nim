@@ -120,13 +120,13 @@ proc parseWhat(name: string, dataType: NimNode, matchType: NimNode, attrs: Table
 
   let
     prod = genSym(nskVar, "prod")
-    queryFn = genSym(nskLet, "queryFn")
+    matchFn = genSym(nskLet, "matchFn")
     condFn = genSym(nskLet, "condFn")
     session = ident("session")
     match = ident("match")
     this = ident("this")
 
-  let queryFnLet =
+  let matchFnLet =
     block:
       let v = genSym(nskParam, "v")
       var queryBody = newNimNode(nnkTupleConstr)
@@ -134,7 +134,7 @@ proc parseWhat(name: string, dataType: NimNode, matchType: NimNode, attrs: Table
         let typeField = ident(typePrefix & $varInfo.typeNum)
         queryBody.add(newNimNode(nnkExprColonExpr).add(ident(varName)).add(quote do: `v`[`varName`].`typeField`))
       quote do:
-        let `queryFn` = proc (`v`: `matchType`): `tupleType` =
+        let `matchFn` = proc (`v`: `matchType`): `tupleType` =
           `queryBody`
 
   let condFnLet =
@@ -176,10 +176,10 @@ proc parseWhat(name: string, dataType: NimNode, matchType: NimNode, attrs: Table
   else:
     thenFinallyFn = quote do: nil
 
-  result.add queryFnLet
+  result.add matchFnLet
   result.add condFnLet
   result.add quote do:
-    var `prod` = initProduction[`dataType`, `tupleType`, `matchType`](`name`, `queryFn`, `condFn`, `thenFn`, `thenFinallyFn`)
+    var `prod` = initProduction[`dataType`, `tupleType`, `matchType`](`name`, `matchFn`, `condFn`, `thenFn`, `thenFinallyFn`)
 
   for condNum in 0 ..< node.len:
     let child = node[condNum]
