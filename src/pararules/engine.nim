@@ -329,16 +329,18 @@ proc fireRules*[T, MatchT](session: var Session[T, MatchT]) =
   # reset state
   session.thenQueue[].clear
   session.thenFinallyQueue[].clear
-  # execute `then` blocks
   for (node, idAttrs) in thenQueue:
     node.trigger = false
+  for node in thenFinallyQueue:
+    node.trigger = false
+  # execute `then` blocks
+  for (node, idAttrs) in thenQueue:
     if node.matches.hasKey(idAttrs):
       let match = node.matches[idAttrs]
       if match.enabled:
         node.thenFn(match.vars)
   # execute `thenFinally` blocks
   for node in thenFinallyQueue:
-    node.trigger = false
     node.thenFinallyFn()
   # recur because there may be new `then` blocks to execute
   session.fireRules()
