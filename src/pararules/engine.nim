@@ -223,8 +223,7 @@ proc leftActivation[T, MatchT](session: var Session[T, MatchT], node: JoinNode[T
     let idAttr = alphaFact.getIdAttr
     var newIdAttrs = idAttrs
     newIdAttrs.add(idAttr)
-    var newToken = token
-    newToken.fact = alphaFact
+    let newToken = Token[T](fact: alphaFact, kind: token.kind)
     let isNew = not node.oldIdAttrs.contains(idAttr)
     session.leftActivation(node.child, newIdAttrs, newVars, newToken, isNew)
 
