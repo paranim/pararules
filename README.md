@@ -1,6 +1,8 @@
 Pararules is the first RETE-based rules engine made for games. It may also be the last, if this turns out to be a bad idea.
 
-Rules engines have been around since the 70s, and the RETE algorithm has been used for almost that long. For some reason, they haven't found their way into games yet. With pararules, you can store the entire state of your game and express the logic as a simple series of rules.
+Rules engines have been around since the 70s, and the RETE algorithm has been used for almost that long. For some reason, they haven't found their way into games yet. With pararules, you can store the entire state of your game and express the logic as a simple series of independent rules.
+
+On the surface, this bears a resemblence to ECSs (entity component systems), but a rules engine can be much more powerful. Rules are fundamentally *reactive* -- they fire when their data is updated, they can create derived facts that always remain up-to-date, and they can trigger other rules in turn.
 
 You can see it in action in the [parakeet](https://github.com/paranim/parakeet) example game and the other [paranim examples](https://github.com/paranim/paranim_examples).
 
@@ -522,6 +524,8 @@ Keep in mind that, if you save the ids and attrs as integers, they need to remai
 
 ## Performance
 
+### Disabling auto fire
+
 By default, rules are fired after every `insert` call. This can be inefficient; you should normally only fire the rules once per frame. You can disable this when creating your session:
 
 ```nim
@@ -535,6 +539,8 @@ session.insert(Global, DeltaTime, game.deltaTime)
 session.insert(Global, TotalTime, game.totalTime)
 session.fireRules()
 ```
+
+### Using initSessionWithRules
 
 Additionally, a very significant performance gain can be had by creating the session and rules in a single command:
 
@@ -564,6 +570,20 @@ There are a few downsides:
 1. `initSessionWithRules` must be called at the top level of your module, not inside a procedure, because it is generating types and procedures.
 2. You will not be able to `add` new rules to the session afterwards, because it must know all of its rules at compile time.
 3. Compile times will slow down as more rules are added.
+
+### Using ref types
+
+As mentioned before, it is *highly* recommended that you use reference types like `ref seq`, rather than value types like `seq`, to store collections in the session. Many copies of facts are made inside the session, so this could be a significant performance problem if you store collections that copy by value.
+
+For example, to store a sequence of tuples as a fact, it might look like this:
+
+```nim
+type Characters = ref seq[tuple[id: int, x: float, y: float]]
+var chars: Characters = nil
+new chars
+chars[] = session.queryAll(rules.getCharacter)
+session.insert(Derived, AllCharacters, chars)
+```
 
 ## Tips
 
