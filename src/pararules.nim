@@ -815,6 +815,15 @@ proc createInitMatchProc(matchType: NimNode, ruleNameToEnumItem: OrderedTable[st
     body = newStmtList(body)
   )
 
+proc flattenRules(rules: NimNode): seq[NimNode] =
+  for r in rules:
+    if r.kind == nnkCommand:
+      result.add(r)
+    elif r.kind == nnkStmtList:
+      result.add(flattenRules(r))
+    else:
+      expectKind(r, nnkCommand)
+
 const matchTypeSuffix = "Match"
 
 macro initSessionWithRules*(dataType: type, args: varargs[untyped]): untyped =
@@ -827,7 +836,8 @@ macro initSessionWithRules*(dataType: type, args: varargs[untyped]): untyped =
     matchSym = genSym(nskType, matchName)
     argCount = args.len
     opts = args[0 ..< argCount-1]
-    rules = args[argCount-1]
+    # flatten rules if there are multiple levels of statement lists
+    rules = newStmtList(flattenRules(args[argCount-1]))
   for rule in rules:
     let
       name = rule.getRuleName
