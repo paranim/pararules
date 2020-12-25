@@ -571,6 +571,8 @@ There are a few downsides:
 2. You will not be able to `add` new rules to the session afterwards, because it must know all of its rules at compile time.
 3. Compile times will slow down as more rules are added.
 
+You may think that an additional downside is that you now must define all your rules in one place, without the flexibility to separate them into different modules. This actually isn't true: you can define your rules separately and use a "wrapper" macro to put them into `initSessionWithRules` at compile time. This is a bit advanced, but see [the test](tests/test3.nim) for an example of this.
+
 ### Using ref types
 
 As mentioned before, it is *highly* recommended that you use reference types like `ref seq`, rather than value types like `seq`, to store collections in the session. Many copies of facts are made inside the session, so this could be a significant performance problem if you store collections that copy by value.
