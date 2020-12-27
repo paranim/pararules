@@ -1,6 +1,4 @@
-Pararules is the first RETE-based rules engine made for games. It may also be the last, if this turns out to be a bad idea.
-
-Rules engines have been around since the 70s, and the RETE algorithm has been used for almost that long. For some reason, they haven't found their way into games yet. With pararules, you can store the entire state of your game and express the logic as a simple series of independent rules.
+Pararules is the first RETE-based rules engine made for games. Rules engines have been around since the 70s, but for some reason, they haven't found their way into games yet. With pararules, you can store the entire state of your game and express the logic as a simple series of independent rules.
 
 On the surface, this bears a resemblence to ECSs (entity component systems), but a rules engine can be much more powerful. Rules are fundamentally *reactive* -- they fire when their data is updated, they can create derived facts that always remain up-to-date, and they can trigger other rules in turn.
 
