@@ -309,7 +309,7 @@ rule movePlayer(Fact):
 
 Notice that we aren't even using `DeltaTime` anymore, but we're keeping it in the `what` block so the rule continues to fire every frame. If all tuples in the `what` block have `then = false`, it will never fire. This way, it will move the player exactly one pixel each frame that an arrow key is pressed. Not exactly the best way to do character movement, but you get the idea.
 
-## Joins and advanced queries
+## Joins
 
 Instead of the `getPlayer` rule, we could make a more generic "getter" rule that works for any id:
 
@@ -584,6 +584,55 @@ new chars
 chars[] = session.queryAll(rules.getCharacter)
 session.insert(Derived, AllCharacters, chars)
 ```
+
+### Using derived facts
+
+In any non-trivial project, you'll end up with a lot of rules that share some common tuples in their `what` blocks, like this:
+
+```nim
+let rules =
+  ruleset:
+    rule getCharacter(Fact):
+      what:
+        (id, X, x)
+        (id, Y, y)
+    rule moveCharacter(Fact):
+      what:
+        (Global, DeltaTime, dt)
+        (id, X, x, then = false)
+        (id, Y, y, then = false)
+      then:
+        session.insert(id, X, x + dt)
+        session.insert(id, Y, y + dt)
+```
+
+Here we have a `getCharacter` rule whose only purpose is for queries, and a `moveCharacter` rule that modifies it when the timestamp is updated. In both cases, there is a join on the `id` binding. Joins are not free -- they have a runtime cost, and in this case, that cost is paid twice.
+
+In theory, this could be solved using a common optimization in rules engines calling node sharing. However, node sharing adds a lot of complexity to the codebase, and if it is automatic, it can be easily lost when subtle changes are made to a rule -- a regression that isn't easy to notice.
+
+It turns out that a feature we've already discussed can solve this: derived facts. The above example can be rewritten like this:
+
+```nim
+let rules =
+  ruleset:
+    rule getCharacter(Fact):
+      what:
+        (id, X, x)
+        (id, Y, y)
+      then:
+        session.insert(id, Character, match)
+    rule moveCharacter(Fact):
+      what:
+        (Global, DeltaTime, dt)
+        (id, Character, ch, then = false)
+      then:
+        session.insert(id, X, ch.x + dt)
+        session.insert(id, Y, ch.y + dt)
+```
+
+With `match` we can get all the bindings in a convenient tuple, such as `(id: 1, x: 10.0, y: 5.0)`. We then insert it as a derived fact, and bring it into the `moveCharacter` rule (the `Character` attribute, of course, must be added to the `Attr` enum and its type must be defined in the `schema`).
+
+This will be faster because we now are only doing the join once, and all subsequent rules are just using the derived fact. As the number of joined tuples gets larger, the performance difference gets more and more substantial.
 
 ## Tips
 
