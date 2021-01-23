@@ -4,6 +4,26 @@ On the surface, this bears a resemblence to ECSs (entity component systems), but
 
 You can see it in action in the [parakeet](https://github.com/paranim/parakeet) example game and the other [paranim examples](https://github.com/paranim/paranim_examples).
 
+## Table of contents
+
+- [Start with the data](#start-with-the-data)
+- [Your first rule](#your-first-rule)
+- [Updating the session from inside a rule](#updating-the-session-from-inside-a-rule)
+- [Queries](#queries)
+- [Rulesets](#rulesets)
+- [Avoiding infinite loops](#avoiding-infinite-loops)
+- [Conditions](#conditions)
+- [Complex types](#complex-types)
+- [Joins](#joins)
+- [Generating ids](#generating-ids)
+- [Derived facts](#derived-facts)
+- [Serializing a session](#serializing-a-session)
+- [Performance](#performance)
+- [Tips](#tips)
+- [Wrap up](#wrap-up)
+- [Comparison to Clara Rules](#comparison-to-clara-rules)
+- [Acknowledgements](#acknowledgements)
+
 ## Start with the data
 
 Your data is stored as `(id, attribute, value)` tuples. For example, the player's X position might be `(Player, X, 100.0)`. The delta time (which is the number of seconds since the last frame) might be `(Global, DeltaTime, 0.0168121)`.
