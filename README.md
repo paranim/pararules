@@ -354,7 +354,7 @@ You can also use `queryAll` to retrieve all results and filter afterwards:
 ```nim
 let chars = session.queryAll(rules.getCharacter)
 for c in chars:
-  if c.id == Player:
+  if c.id == Player.ord:
     echo c.x, " ", c.y
 ```
 
