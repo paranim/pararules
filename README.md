@@ -257,6 +257,8 @@ rule stopPlayer(Fact):
     session.insert(Player, X, 0.0)
 ```
 
+Using a `cond` block is better because it also affects the results of `queryAll` -- matches that didn't pass the conditions will not be included. Also, in the future I'll probably be able to create more optimal code because it will let me run those conditions earlier in the network.
+
 ## Complex types
 
 Pararules is not limited to storing scalar types like `float` and `int` — you can use any type you want. For example, to store the currently-pressed keys, you can import the `sets` module and use a `HashSet[int]` to store them. However, you need to use a type alias when specifying it in the schema:
