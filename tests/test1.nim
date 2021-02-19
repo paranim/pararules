@@ -805,6 +805,36 @@ test "frp glitch":
 
   check output == @[(-2, false), (2, true)]
 
+test "non-deterministic behavior":
+  var triggerCount = 0
+  let rules =
+    ruleset:
+      rule rule1(Fact):
+        what:
+          (id, Color, "blue")
+        then:
+          triggerCount += 1
+          session.insert(id, Color, "green")
+      rule rule2(Fact):
+        what:
+          (id, Color, "blue")
+        then:
+          triggerCount += 1
+      rule rule3(Fact):
+        what:
+          (id, Color, "blue")
+        then:
+          triggerCount += 1
+
+  var session = initSession(Fact, autoFire = false)
+  for r in rules.fields:
+    session.add(r)
+
+  session.insert(Bob, Color, "blue")
+  session.fireRules()
+
+  check triggerCount == 3
+
 # this one is not used...
 # it's just here to make sure we can define
 # multiple schemas in one module

@@ -332,10 +332,18 @@ proc fireRules*[T, MatchT](session: var Session[T, MatchT]) =
     node.trigger = false
   for node in thenFinallyQueue:
     node.trigger = false
+  # keep a copy of the matches before executing the :then functions.
+  # if we pull the matches from inside the for loop below,
+  # it'll produce non-deterministic results because `matches`
+  # could be modified by the for loop itself. see test: "non-deterministic behavior"
+  var nodeToMatches: Table[ptr MemoryNode[T, MatchT], Table[IdAttrs, Match[MatchT]]]
+  for (node, _) in thenQueue:
+    nodeToMatches[node] = node.matches
   # execute `then` blocks
   for (node, idAttrs) in thenQueue:
-    if node.matches.hasKey(idAttrs):
-      let match = node.matches[idAttrs]
+    let matches = nodeToMatches[node]
+    if matches.hasKey(idAttrs):
+      let match = matches[idAttrs]
       if match.enabled:
         node.thenFn(match.vars)
   # execute `thenFinally` blocks
