@@ -886,4 +886,4 @@ macro initSession*(dataType: type, autoFire: bool = true): untyped =
     initSession[`dataType`, Vars[`dataType`]](autoFire = `autoFire`)
 
 export engine.fireRules, engine.add, engine.queryAll, engine.get, engine.unwrap
-export sets.items # for some reason, i need to do this so users don't need to `import sets` explicitly
+export sets.items, sets.len # for some reason, i need to do this so users don't need to `import sets` explicitly
