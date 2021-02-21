@@ -338,7 +338,8 @@ proc fireRules*[T, MatchT](session: var Session[T, MatchT]) =
   # could be modified by the for loop itself. see test: "non-deterministic behavior"
   var nodeToMatches: Table[ptr MemoryNode[T, MatchT], Table[IdAttrs, Match[MatchT]]]
   for (node, _) in thenQueue:
-    nodeToMatches[node] = node.matches
+    if not nodeToMatches.hasKey(node):
+      nodeToMatches[node] = node.matches
   # execute `then` blocks
   for (node, idAttrs) in thenQueue:
     let matches = nodeToMatches[node]
