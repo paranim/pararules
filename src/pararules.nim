@@ -88,7 +88,7 @@ proc getUsedVars(vars: OrderedTable[string, VarInfo], node: NimNode): OrderedTab
       result[v] = vars[v]
 
 proc addCond(dataType: NimNode, vars: OrderedTable[string, VarInfo], prod: NimNode, node: NimNode): NimNode =
-  expectKind(node, nnkPar)
+  expectKind(node, {nnkPar, nnkTupleConstr})
   let id = node.wrap(dataType, Identifier)
   let attr = node.wrap(dataType, Attribute)
   let value = node.wrap(dataType, Value)
@@ -107,7 +107,7 @@ proc parseWhat(name: string, dataType: NimNode, matchType: NimNode, attrs: Table
   var vars: OrderedTable[string, VarInfo]
   for condNum in 0 ..< node.len:
     let child = node[condNum]
-    expectKind(child, nnkPar)
+    expectKind(child, {nnkPar, nnkTupleConstr})
     for i in 0..2:
       if child[i].isVar:
         if i == 1:
