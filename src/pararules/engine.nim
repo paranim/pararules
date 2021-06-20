@@ -486,3 +486,6 @@ proc unwrap*(fact: object, kind: type): kind =
     when val is kind:
       return val
   raise newException(Exception, "The given object has no field of type " & $kind)
+
+proc contains*[T, MatchT](session: Session[T, MatchT], id: int, attr: int): bool =
+  session.idAttrNodes.contains((id, attr))

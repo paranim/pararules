@@ -835,6 +835,22 @@ test "non-deterministic behavior":
 
   check triggerCount == 3
 
+test "contains":
+  let rules =
+    ruleset:
+      rule rule1(Fact):
+        what:
+          (id, Color, "blue")
+
+  var session = initSession(Fact, autoFire = false)
+  for r in rules.fields:
+    session.add(r)
+
+  session.insert(Bob, Color, "blue")
+  check session.contains(Bob.ord, Color.ord)
+  session.retract(Bob, Color)
+  check not session.contains(Bob.ord, Color.ord)
+
 # this one is not used...
 # it's just here to make sure we can define
 # multiple schemas in one module
