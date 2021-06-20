@@ -847,9 +847,12 @@ test "contains":
     session.add(r)
 
   session.insert(Bob, Color, "blue")
-  check session.contains(Bob.ord, Color.ord)
+  check session.contains(Bob, Color)
   session.retract(Bob, Color)
-  check not session.contains(Bob.ord, Color.ord)
+  check not session.contains(Bob, Color)
+
+  # can also pass id as an int
+  check not session.contains(Bob.ord, Color)
 
 # this one is not used...
 # it's just here to make sure we can define

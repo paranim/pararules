@@ -550,7 +550,29 @@ proc createRetractProc(dataType: NimNode, intType: NimNode, attrType: NimNode, i
     body = newStmtList(body)
   )
 
-proc createUpdateProcs(dataType: NimNode, types: seq[NimNode]): NimNode =
+proc createContainsProc(dataType: NimNode, intType: NimNode, attrType: NimNode, idType: NimNode): NimNode =
+  let
+    procId = ident("contains")
+    engineProcId = bindSym("contains")
+    session = ident("session")
+    sessionType = newNimNode(nnkVarTy).add(newNimNode(nnkBracketExpr).add(bindSym("Session")).add(dataType).add(ident("auto")))
+    id = ident("id")
+    attr = ident("attr")
+    body = quote do:
+      `engineProcId`(`session`, `id`.ord, `attr`.ord)
+
+  newProc(
+    name = postfix(procId, "*"),
+    params = [
+      ident("bool"),
+      newIdentDefs(session, sessionType),
+      newIdentDefs(id, infix(idType, "or", intType)),
+      newIdentDefs(attr, attrType),
+    ],
+    body = newStmtList(body)
+  )
+
+proc createSessionProcs(dataType: NimNode, types: seq[NimNode]): NimNode =
   result = newStmtList()
   # create insert and retract procs for each value type
   for i in 0 ..< types.len:
@@ -560,6 +582,8 @@ proc createUpdateProcs(dataType: NimNode, types: seq[NimNode]): NimNode =
   result.add(createInsertProc(dataType, types[0], types[1], types[2]))
   # create a retract proc that only requires the id and attr
   result.add(createRetractProc(dataType, types[0], types[1], types[2]))
+  # create a contains proc that only requires the id and attr
+  result.add(createContainsProc(dataType, types[0], types[1], types[2]))
 
 proc createConstants(dataType: NimNode, types: seq[NimNode], attrs: Table[string, int]): NimNode =
   let attrToTypeId = ident(attrToTypePrefix & dataType.strVal)
@@ -625,7 +649,7 @@ use `Strings` in the schema.
     createEqProc(dataType, types),
     createInitProcs(dataType, enumName, types),
     createCheckProc(dataType, types, attrs),
-    createUpdateProcs(dataType, types),
+    createSessionProcs(dataType, types),
     createConstants(dataType, types, attrs)
   )
 
@@ -884,7 +908,7 @@ macro initSession*(dataType: type, autoFire: bool = true): untyped =
   quote do:
     initSession[`dataType`, Vars[`dataType`]](autoFire = `autoFire`)
 
-export engine.fireRules, engine.add, engine.queryAll, engine.get, engine.unwrap, engine.contains
+export engine.fireRules, engine.add, engine.queryAll, engine.get, engine.unwrap
 
 # i need to do this so users don't need to `import sets` explicitly
 # see: https://github.com/nim-lang/Nim/issues/11167
