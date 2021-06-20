@@ -532,13 +532,12 @@ proc createRetractProc(dataType: NimNode, intType: NimNode, attrType: NimNode, i
   let
     procId = ident("retract")
     engineProcId = bindSym("retractFact")
-    initProc = ident(initPrefix & dataType.strVal)
     session = ident("session")
     sessionType = newNimNode(nnkVarTy).add(newNimNode(nnkBracketExpr).add(bindSym("Session")).add(dataType).add(ident("auto")))
     id = ident("id")
     attr = ident("attr")
     body = quote do:
-      `engineProcId`(`session`, `initProc`(`id`), `initProc`(`attr`))
+      `engineProcId`(`session`, `id`.ord, `attr`.ord)
 
   newProc(
     name = postfix(procId, "*"),

@@ -408,6 +408,9 @@ proc retractFact*[T, MatchT](session: var Session[T, MatchT], fact: Fact[T]) =
 proc retractFact*[T, MatchT](session: var Session[T, MatchT], id: T, attr: T) =
   let id = id.slot0
   let attr = attr.slot1.ord
+  retractFact(session, id, attr)
+
+proc retractFact*[T, MatchT](session: var Session[T, MatchT], id: int, attr: int) =
   let idAttr = (id, attr)
   # we use toSeq here to make a copy of idAttrNodes[idAttr], since
   # rightActivation will modify it
