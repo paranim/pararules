@@ -854,6 +854,37 @@ test "contains":
   # can also pass id as an int
   check not session.contains(Bob.ord, Color)
 
+test "two sessions can use the same rules":
+  let rules =
+    ruleset:
+      rule getAlice(Fact):
+        what:
+          (Alice, Color, color)
+          (Alice, Height, height)
+      rule getPerson(Fact):
+        what:
+          (id, Color, color)
+          (id, Height, height)
+
+  var session = initSession(Fact)
+  for r in rules.fields:
+    session.add(r)
+
+  session.insert(Alice, Color, "blue")
+  session.insert(Alice, Height, 60)
+
+  # second session uses the same rules but inserts different values
+  var session2 = initSession(Fact)
+  for r in rules.fields:
+    session2.add(r)
+  session2.insert(Alice, Color, "green")
+  session2.insert(Alice, Height, 70)
+
+  # first session returns the correct values
+  let alice = session.query(rules.getAlice)
+  check alice.color == "blue"
+  check alice.height == 60
+
 # this one is not used...
 # it's just here to make sure we can define
 # multiple schemas in one module

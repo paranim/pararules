@@ -54,7 +54,7 @@ type
     lastMatchId: int
     matches: Table[IdAttrs, Match[MatchT]]
     matchIds: Table[int, IdAttrs]
-    condition: Condition[T, MatchT]
+    condition: Condition[T]
     case nodeType: MemoryNodeType
       of Leaf:
         condFn: CondFn[MatchT]
@@ -67,20 +67,20 @@ type
     parent: MemoryNode[T, MatchT]
     child: MemoryNode[T, MatchT]
     alphaNode: AlphaNode[T, MatchT]
-    condition: Condition[T, MatchT]
+    condition: Condition[T]
     idName: string
     oldIdAttrs: HashSet[IdAttr]
     disableFastUpdates: bool
     ruleName: string
 
   # session
-  Condition[T, MatchT] = object
-    nodes: seq[AlphaNode[T, MatchT]]
+  Condition[T] = object
+    nodes: seq[tuple[testField: Field, testValue: T]]
     vars: seq[Var]
     shouldTrigger: bool
   Production*[T, U, MatchT] = object
     name: string
-    conditions: seq[Condition[T, MatchT]]
+    conditions: seq[Condition[T]]
     convertMatchFn: ConvertMatchFn[MatchT, U]
     condFn: CondFn[MatchT]
     thenFn: ThenFn[T, U, MatchT]
@@ -102,27 +102,27 @@ proc addNode(node: AlphaNode, newNode: AlphaNode): AlphaNode =
   node.children.add(newNode)
   return newNode
 
-proc addNodes(session: Session, nodes: seq[AlphaNode]): AlphaNode =
+proc addNodes[T, MatchT](session: Session[T, MatchT], nodes: seq[tuple[testField: Field, testValue: T]]): AlphaNode[T, MatchT] =
   result = session.alphaNode
   for node in nodes:
-    result = result.addNode(node)
+    result = result.addNode(AlphaNode[T, MatchT](testField: node.testField, testValue: node.testValue))
 
 proc add*[T, U, MatchT](production: var Production[T, U, MatchT], id: Var or T, attr: T, value: Var or T, then: bool) =
-  var condition = Condition[T, MatchT](shouldTrigger: then)
+  var condition = Condition[T](shouldTrigger: then)
   for fieldType in [Field.Identifier, Field.Attribute, Field.Value]:
     case fieldType:
       of Field.Identifier:
         when id is T:
-          condition.nodes.add AlphaNode[T, MatchT](testField: fieldType, testValue: id)
+          condition.nodes.add((testField: fieldType, testValue: id))
         else:
           var temp = id
           temp.field = fieldType
           condition.vars.add(temp)
       of Field.Attribute:
-        condition.nodes.add AlphaNode[T, MatchT](testField: fieldType, testValue: attr)
+        condition.nodes.add((testField: fieldType, testValue: attr))
       of Field.Value:
         when value is T:
-          condition.nodes.add AlphaNode[T, MatchT](testField: fieldType, testValue: value)
+          condition.nodes.add((testField: fieldType, testValue: value))
         else:
           var temp = value
           temp.field = fieldType
@@ -196,7 +196,7 @@ proc getVarFromFact[T, MatchT](vars: var MatchT, key: string, fact: T): bool =
   vars[key] = fact
   true
 
-proc getVarsFromFact[T, MatchT](vars: var MatchT, condition: Condition[T, MatchT], fact: Fact[T]): bool =
+proc getVarsFromFact[T, MatchT](vars: var MatchT, condition: Condition[T], fact: Fact[T]): bool =
   for v in condition.vars:
     case v.field:
       of Identifier:
