@@ -885,6 +885,23 @@ test "two sessions can use the same rules":
   check alice.color == "blue"
   check alice.height == 60
 
+test "recursion limit":
+  let rules =
+    ruleset:
+      rule rule1(Fact):
+        what:
+          (id, Color, color)
+        then:
+          session.insert(id, Color, color)
+
+  var session = initSession(Fact, autoFire = false)
+  for r in rules.fields:
+    session.add(r)
+
+  session.insert(Bob, Color, "blue")
+  expect Exception:
+    session.fireRules()
+
 # this one is not used...
 # it's just here to make sure we can define
 # multiple schemas in one module

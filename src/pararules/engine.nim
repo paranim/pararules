@@ -318,40 +318,47 @@ proc rightActivation[T, MatchT](session: var Session[T, MatchT], node: var Alpha
     else:
       session.rightActivation(child, idAttr, token)
 
-proc fireRules*[T, MatchT](session: var Session[T, MatchT]) =
+proc fireRules*[T, MatchT](session: var Session[T, MatchT], recursionLimit: int = 16) =
   if session.insideRule:
     return
-  let thenQueue = session.thenQueue[].toSeq
-  let thenFinallyQueue = session.thenFinallyQueue[].toSeq
-  if thenQueue.len == 0 and thenFinallyQueue.len == 0:
-    return
-  # reset state
-  session.thenQueue[].clear
-  session.thenFinallyQueue[].clear
-  for (node, idAttrs) in thenQueue:
-    node.trigger = false
-  for node in thenFinallyQueue:
-    node.trigger = false
-  # keep a copy of the matches before executing the :then functions.
-  # if we pull the matches from inside the for loop below,
-  # it'll produce non-deterministic results because `matches`
-  # could be modified by the for loop itself. see test: "non-deterministic behavior"
-  var nodeToMatches: Table[ptr MemoryNode[T, MatchT], Table[IdAttrs, Match[MatchT]]]
-  for (node, _) in thenQueue:
-    if not nodeToMatches.hasKey(node):
-      nodeToMatches[node] = node.matches
-  # execute `then` blocks
-  for (node, idAttrs) in thenQueue:
-    let matches = nodeToMatches[node]
-    if matches.hasKey(idAttrs):
-      let match = matches[idAttrs]
-      if match.enabled:
-        node.thenFn(match.vars)
-  # execute `thenFinally` blocks
-  for node in thenFinallyQueue:
-    node.thenFinallyFn()
-  # recur because there may be new `then` blocks to execute
-  session.fireRules()
+  var recurCount = 0
+  while true:
+    if recursionLimit >= 0:
+      if recurCount == recursionLimit:
+        let msg = "Recursion limit hit. The current limit is " &
+                  $recursionLimit &
+                  " (set by the recursionLimit param of fireRules)"
+        raise newException(Exception, msg)
+      recurCount += 1
+    let thenQueue = session.thenQueue[].toSeq
+    let thenFinallyQueue = session.thenFinallyQueue[].toSeq
+    if thenQueue.len == 0 and thenFinallyQueue.len == 0:
+      return
+    # reset state
+    session.thenQueue[].clear
+    session.thenFinallyQueue[].clear
+    for (node, idAttrs) in thenQueue:
+      node.trigger = false
+    for node in thenFinallyQueue:
+      node.trigger = false
+    # keep a copy of the matches before executing the :then functions.
+    # if we pull the matches from inside the for loop below,
+    # it'll produce non-deterministic results because `matches`
+    # could be modified by the for loop itself. see test: "non-deterministic behavior"
+    var nodeToMatches: Table[ptr MemoryNode[T, MatchT], Table[IdAttrs, Match[MatchT]]]
+    for (node, _) in thenQueue:
+      if not nodeToMatches.hasKey(node):
+        nodeToMatches[node] = node.matches
+    # execute `then` blocks
+    for (node, idAttrs) in thenQueue:
+      let matches = nodeToMatches[node]
+      if matches.hasKey(idAttrs):
+        let match = matches[idAttrs]
+        if match.enabled:
+          node.thenFn(match.vars)
+    # execute `thenFinally` blocks
+    for node in thenFinallyQueue:
+      node.thenFinallyFn()
 
 proc getAlphaNodesForFact[T, MatchT](session: var Session[T, MatchT], node: var AlphaNode[T, MatchT], fact: Fact[T], root: bool, nodes: var HashSet[ptr AlphaNode[T, MatchT]]) =
   if root:
