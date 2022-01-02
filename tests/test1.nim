@@ -9,7 +9,7 @@ type
     Seth, Thomas, Xavier, Yair, Zach,
     Derived,
   Attr* = enum
-    Color, LeftOf, RightOf, Height, On, Self,
+    Color, LeftOf, RightOf, Height, On, Age, Self,
     AllPeople,
 
 schema Fact(Id, Attr):
@@ -18,6 +18,7 @@ schema Fact(Id, Attr):
   RightOf: Id
   Height: int
   On: string
+  Age: int
   Self: Id
   AllPeople: People
 
@@ -890,14 +891,41 @@ test "recursion limit":
     ruleset:
       rule rule1(Fact):
         what:
-          (id, Color, color)
+          (Alice, Color, color)
         then:
-          session.insert(id, Color, color)
+          session.insert(Alice, Height, 15)
+      rule rule2(Fact):
+        what:
+          (Alice, Height, height)
+        then:
+          session.insert(Alice, Age, 10)
+      rule rule3(Fact):
+        what:
+          (Alice, Age, age)
+        then:
+          session.insert(Alice, Color, "maize")
+          session.insert(Bob, Age, 10)
+      rule rule4(Fact):
+        what:
+          (Bob, Age, age)
+        then:
+          session.insert(Bob, Height, 15)
+      rule rule5(Fact):
+        what:
+          (Bob, Height, height)
+        then:
+          session.insert(Bob, Age, 10)
+      rule rule6(Fact):
+        what:
+          (Bob, Color, color)
+        then:
+          session.insert(Bob, Color, color)
 
   var session = initSession(Fact, autoFire = false)
   for r in rules.fields:
     session.add(r)
 
+  session.insert(Alice, Color, "red")
   session.insert(Bob, Color, "blue")
   expect Exception:
     session.fireRules()
@@ -911,5 +939,6 @@ schema Stuff(Id, Attr):
   RightOf: Id
   Height: float
   On: string
+  Age: int
   Self: Id
   AllPeople: People

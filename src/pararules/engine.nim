@@ -55,6 +55,7 @@ type
     matches: Table[IdAttrs, Match[MatchT]]
     matchIds: Table[int, IdAttrs]
     condition: Condition[T]
+    ruleName: string
     case nodeType: MemoryNodeType
       of Leaf:
         condFn: CondFn[MatchT]
@@ -92,6 +93,7 @@ type
     insideRule: bool
     thenQueue: ref HashSet[tuple[node: ptr MemoryNode[T, MatchT], idAttrs: IdAttrs]]
     thenFinallyQueue: ref HashSet[ptr MemoryNode[T, MatchT]]
+    triggeredNodeIds: ref HashSet[ptr MemoryNode[T, MatchT]]
     autoFire: bool
     initMatch: InitMatchFn[MatchT]
 
@@ -163,7 +165,7 @@ proc add*[T, U, MatchT](session: Session[T, MatchT], production: Production[T, U
     # successors must be sorted by ancestry (descendents first) to avoid duplicate rule firings
     leafAlphaNode.successors.sort(proc (x, y: JoinNode[T, MatchT]): int =
       if isAncestor(x, y): 1 else: -1)
-    var memNode = MemoryNode[T, MatchT](parent: joinNode, nodeType: if i == last: Leaf else: Partial, condition: condition, lastMatchId: -1)
+    var memNode = MemoryNode[T, MatchT](parent: joinNode, nodeType: if i == last: Leaf else: Partial, condition: condition, ruleName: production.name, lastMatchId: -1)
     if memNode.nodeType == Leaf:
       memNode.condFn = production.condFn
       if production.thenFn != nil:
@@ -243,6 +245,8 @@ proc leftActivation[T, MatchT](session: var Session[T, MatchT], node: var Memory
   let idAttr = idAttrs[idAttrs.len-1]
   # if the insert/update fact is new and this condition doesn't have then = false, let the leaf node trigger
   if isNew and (token.kind == Insert or token.kind == Update) and node.condition.shouldTrigger:
+    when not defined(release):
+      session.triggeredNodeIds[].incl(node.addr)
     node.leafNode.trigger = true
   # add or remove the match
   case token.kind:
@@ -318,17 +322,60 @@ proc rightActivation[T, MatchT](session: var Session[T, MatchT], node: var Alpha
     else:
       session.rightActivation(child, idAttr, token)
 
+proc raiseRecursionLimit(limit: int, additionalText: string = "") =
+  let msg = "Recursion limit hit. The current limit is " & $limit & " (set by the recursionLimit param of fireRules)."
+  raise newException(Exception, msg & additionalText & "\nTry using `then = false` to prevent triggering rules in an infinite loop.")
+
+when not defined(release):
+  import json
+  from strutils import nil
+
+  proc raiseRecursionLimit[T, MatchT](limit: int, executedNodes: seq[Table[ptr MemoryNode[T, MatchT], HashSet[ptr MemoryNode[T, MatchT]]]]) =
+    var nodes = newJObject()
+    for i in countDown(executedNodes.len-1, 0):
+      var currNodes = newJObject()
+      let nodeToTriggeredNodes = executedNodes[i]
+      for (node, triggeredNodes) in nodeToTriggeredNodes.pairs:
+        var obj = newJObject()
+        for triggeredNode in triggeredNodes:
+          if triggeredNode.ruleName in nodes:
+            obj[triggeredNode.ruleName] = nodes[triggeredNode.ruleName]
+        currNodes[node.ruleName] = obj
+      nodes = currNodes
+    proc findCycles(cycles: var HashSet[seq[string]], k: string, v: JsonNode, cyc: seq[string]) =
+      var newCyc = cyc
+      newCyc.add k
+      let index = cyc.find(k)
+      if index >= 0:
+        cycles.incl newCyc[index ..< newCyc.len]
+      else:
+        for pair in v.pairs:
+          findCycles(cycles, pair.key, pair.val, newCyc)
+    var cycles: HashSet[seq[string]]
+    for pair in nodes.pairs:
+      findCycles(cycles, pair.key, pair.val, @[])
+    var text = ""
+    for cycle in cycles:
+      text &= "\nCycle detected! "
+      if cycle.len == 2:
+        text &= cycle[0] & " is triggering itself."
+      else:
+        text &= strutils.join(cycle, " -> ")
+    raiseRecursionLimit(limit, text)
+
 proc fireRules*[T, MatchT](session: var Session[T, MatchT], recursionLimit: int = 16) =
   if session.insideRule:
     return
+  when not defined(release):
+    var executedNodes: seq[Table[ptr MemoryNode[T, MatchT], HashSet[ptr MemoryNode[T, MatchT]]]]
   var recurCount = 0
   while true:
     if recursionLimit >= 0:
       if recurCount == recursionLimit:
-        let msg = "Recursion limit hit. The current limit is " &
-                  $recursionLimit &
-                  " (set by the recursionLimit param of fireRules)"
-        raise newException(Exception, msg)
+        when defined(release):
+          raiseRecursionLimit(recursionLimit)
+        else:
+          raiseRecursionLimit(recursionLimit, executedNodes)
       recurCount += 1
     let thenQueue = session.thenQueue[].toSeq
     let thenFinallyQueue = session.thenFinallyQueue[].toSeq
@@ -341,6 +388,12 @@ proc fireRules*[T, MatchT](session: var Session[T, MatchT], recursionLimit: int 
       node.trigger = false
     for node in thenFinallyQueue:
       node.trigger = false
+    when not defined(release):
+      var nodeToTriggeredNodeIds: Table[ptr MemoryNode[T, MatchT], HashSet[ptr MemoryNode[T, MatchT]]]
+      proc add(t: var Table[ptr MemoryNode[T, MatchT], HashSet[ptr MemoryNode[T, MatchT]]], nodeId: ptr MemoryNode[T, MatchT], s: HashSet[ptr MemoryNode[T, MatchT]]) =
+        if nodeId notin t:
+          t[nodeId] = initHashSet[ptr MemoryNode[T, MatchT]]()
+        t[nodeId].incl(s)
     # keep a copy of the matches before executing the :then functions.
     # if we pull the matches from inside the for loop below,
     # it'll produce non-deterministic results because `matches`
@@ -355,10 +408,21 @@ proc fireRules*[T, MatchT](session: var Session[T, MatchT], recursionLimit: int 
       if matches.hasKey(idAttrs):
         let match = matches[idAttrs]
         if match.enabled:
+          when not defined(release):
+            session.triggeredNodeIds[].clear
           node.thenFn(match.vars)
+          when not defined(release):
+            add(nodeToTriggeredNodeIds, node, session.triggeredNodeIds[])
     # execute `thenFinally` blocks
     for node in thenFinallyQueue:
+      when not defined(release):
+        session.triggeredNodeIds[].clear
       node.thenFinallyFn()
+      when not defined(release):
+        add(nodeToTriggeredNodeIds, node, session.triggeredNodeIds[])
+    when not defined(release):
+      # save triggered node ids
+      executedNodes.add(nodeToTriggeredNodeIds)
 
 proc getAlphaNodesForFact[T, MatchT](session: var Session[T, MatchT], node: var AlphaNode[T, MatchT], fact: Fact[T], root: bool, nodes: var HashSet[ptr AlphaNode[T, MatchT]]) =
   if root:
@@ -436,6 +500,9 @@ proc initSession*[T, MatchT](autoFire: bool = true, initMatch: InitMatchFn[Match
   result.thenQueue[] = initHashSet[(ptr MemoryNode[T, MatchT], IdAttrs)]()
   new result.thenFinallyQueue
   result.thenFinallyQueue[] = initHashSet[ptr MemoryNode[T, MatchT]]()
+  when not defined(release):
+    new result.triggeredNodeIds
+    result.triggeredNodeIds[] = initHashSet[ptr MemoryNode[T, MatchT]]()
   result.autoFire = autoFire
   result.initMatch = initMatch
 
