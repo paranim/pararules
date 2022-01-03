@@ -66,7 +66,7 @@ macro defineSessionWithRules(): untyped =
     getters = getterRules()
     movers = moveRules()
   quote:
-    defineSessionWithRules(Fact):
+    defineSessionWithRules(Fact, FactMatch, autoFire = false):
       `getters`
       `movers`
 
@@ -75,10 +75,11 @@ macro defineSessionWithRules(): untyped =
 let (initSession, rules) = defineSessionWithRules()
 
 test "can use wrapper macro to break up rules":
-  var session = initSession()
+  var session: Session[Fact, FactMatch] = initSession()
   session.insert(Player, X, 0.0)
   session.insert(Player, Y, 1.0)
   session.insert(Global, WindowWidth, 100)
   session.insert(Global, DeltaTime, 100.0)
+  session.fireRules
   check session.query(rules.getPlayer).x == 0.0
 

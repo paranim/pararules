@@ -849,14 +849,14 @@ proc flattenRules(rules: NimNode): seq[NimNode] =
 
 const matchTypeSuffix = "Match"
 
-macro defineSessionWithRules*(dataType: type, args: varargs[untyped]): untyped =
+macro defineSessionWithRules*(dataType: type, matchType: untyped, args: varargs[untyped]): untyped =
+  expectKind(matchType, {nnkIdent, nnkSym})
   var
     ruleNameToTupleType: OrderedTable[string, NimNode]
     ruleNameToEnumItem: OrderedTable[string, NimNode]
     ruleNameToVars: OrderedTable[string, seq[string]]
   let
     matchName = dataType.strVal & matchTypeSuffix
-    matchSym = genSym(nskType, matchName)
     argCount = args.len
     opts = args[0 ..< argCount-1]
     # flatten rules if there are multiple levels of statement lists
@@ -872,20 +872,20 @@ macro defineSessionWithRules*(dataType: type, args: varargs[untyped]): untyped =
   let
     enumName = matchName & enumSuffix
     enumSym = genSym(nskType, enumName)
-    typeNode = createTypesForSession(matchSym, enumSym, rules, ruleNameToTupleType, ruleNameToEnumItem)
-    getterProc = createGetterProc(dataType, matchSym, ruleNameToVars, ruleNameToEnumItem)
-    setterProc = createSetterProc(dataType, matchSym, ruleNameToVars, ruleNameToEnumItem)
-    checkerProc = createCheckerProc(dataType, matchSym, ruleNameToVars, ruleNameToEnumItem)
-    initMatchProc = createInitMatchProc(matchSym, ruleNameToEnumItem)
+    typeNode = createTypesForSession(matchType, enumSym, rules, ruleNameToTupleType, ruleNameToEnumItem)
+    getterProc = createGetterProc(dataType, matchType, ruleNameToVars, ruleNameToEnumItem)
+    setterProc = createSetterProc(dataType, matchType, ruleNameToVars, ruleNameToEnumItem)
+    checkerProc = createCheckerProc(dataType, matchType, ruleNameToVars, ruleNameToEnumItem)
+    initMatchProc = createInitMatchProc(matchType, ruleNameToEnumItem)
   var tup = makeTupleOfRules(rules)
   for expr in tup:
     let rule = expr[1]
     expectKind(rule, nnkCommand)
     var call = rule[1]
     expectKind(call, nnkCall)
-    call.add(matchSym)
+    call.add(matchType)
   let sessionSym = bindSym("initSession")
-  var session = newNimNode(nnkCall).add(newNimNode(nnkBracketExpr).add(sessionSym, dataType, matchSym))
+  var session = newNimNode(nnkCall).add(newNimNode(nnkBracketExpr).add(sessionSym, dataType, matchType))
   for opt in opts:
     expectKind(opt, nnkExprEqExpr)
     session.add(opt)
@@ -898,7 +898,7 @@ macro defineSessionWithRules*(dataType: type, args: varargs[untyped]): untyped =
     block:
       let rules = `tup`
       (initSession:
-        proc (): Session[`dataType`, `matchSym`] =
+        proc (): Session[`dataType`, `matchType`] =
           result = `session`
           for r in rules.fields:
             result.add(r)
@@ -907,8 +907,11 @@ macro defineSessionWithRules*(dataType: type, args: varargs[untyped]): untyped =
 
 # a convenience macro that returns an instantiated session rather than an init proc
 macro initSessionWithRules*(dataType: type, args: varargs[untyped]): untyped =
+  let
+    matchName = dataType.strVal & matchTypeSuffix
+    matchSym = genSym(nskType, matchName)
   quote:
-    let (initSession, rules) = defineSessionWithRules(`dataType`, `args`)
+    let (initSession, rules) = defineSessionWithRules(`dataType`, `matchSym`, `args`)
     (session: initSession(), rules: rules)
 
 ## export so the engine doesn't need to be imported directly
@@ -917,7 +920,7 @@ macro initSession*(dataType: type, autoFire: bool = true): untyped =
   quote do:
     initSession[`dataType`, Vars[`dataType`]](autoFire = `autoFire`)
 
-export engine.fireRules, engine.add, engine.queryAll, engine.get, engine.unwrap
+export engine.Session, engine.fireRules, engine.add, engine.queryAll, engine.get, engine.unwrap
 
 # i need to do this so users don't need to `import sets` explicitly
 # see: https://github.com/nim-lang/Nim/issues/11167

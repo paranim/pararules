@@ -566,7 +566,7 @@ Additionally, a very significant performance gain can be had by defining the ses
 
 ```nim
 let (initSession, rules) =
-  defineSessionWithRules(Fact, autoFire = false):
+  defineSessionWithRules(Fact, FactMatch, autoFire = false):
     rule getPlayer(Fact):
       what:
         (Player, X, x)
@@ -582,10 +582,10 @@ let (initSession, rules) =
         elif keys.contains(262): # right arrow
           session.insert(Player, X, x + 1.0)
 
-var session = initSession()
+var session: Session[Fact, FactMatch] = initSession()
 ```
 
-This is not merely a convenience; there is a very big internal difference. Since `defineSessionWithRules` knows all of its rules at compile time, it is able to generate a special type to store the matches. Normally, matches are stored in tables, which are significantly slower.
+This is not merely a convenience; there is a very big internal difference. Since `defineSessionWithRules` knows all of its rules at compile time, it is able to generate a special type to store the matches (in the example above, this type is called `FactMatch`). Normally, matches are stored in tables, which are significantly slower.
 
 You must call `defineSessionWithRules` at the top-level of your module because it's creating exported types. It returns a tuple containing your special `initSession` proc as well as the `rules` tuple (similar to what you'd get from `ruleset`).
 
