@@ -258,6 +258,15 @@ macro rule*(sig: untyped, body: untyped): untyped =
   quote do:
     ruleWithAttrs(`sig`, `dataType`, `matchType`, `attrToType`, `typeToName`, `body`)
 
+proc flattenRules(rules: NimNode): seq[NimNode] =
+  for r in rules:
+    if r.kind == nnkCommand:
+      result.add(r)
+    elif r.kind == nnkStmtList:
+      result.add(flattenRules(r))
+    else:
+      expectKind(r, nnkCommand)
+
 proc getRuleName(rule: NimNode): string =
   expectKind(rule, nnkCommand)
   let call = rule[1]
@@ -267,9 +276,10 @@ proc getRuleName(rule: NimNode): string =
   id.strVal
 
 proc makeTupleOfRules(rules: NimNode): NimNode =
-  expectKind(rules, nnkStmtList)
+  # flatten rules if there are multiple levels of statement lists
+  let flatRules = newStmtList(flattenRules(rules))
   result = newNimNode(nnkTupleConstr)
-  for r in rules:
+  for r in flatRules:
     let name = r.getRuleName
     result.add(newNimNode(nnkExprColonExpr).add(ident(name)).add(r))
 
@@ -837,15 +847,6 @@ proc createInitMatchProc(matchType: NimNode, ruleNameToEnumItem: OrderedTable[st
     ],
     body = newStmtList(body)
   )
-
-proc flattenRules(rules: NimNode): seq[NimNode] =
-  for r in rules:
-    if r.kind == nnkCommand:
-      result.add(r)
-    elif r.kind == nnkStmtList:
-      result.add(flattenRules(r))
-    else:
-      expectKind(r, nnkCommand)
 
 const matchTypeSuffix = "Match"
 
