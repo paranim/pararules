@@ -583,6 +583,9 @@ let (initSession, rules) =
           session.insert(Player, X, x + 1.0)
 
 var session: Session[Fact, FactMatch] = initSession()
+
+for r in rules.fields:
+  session.add(r)
 ```
 
 This is not merely a convenience; there is a very big internal difference. Since `defineSessionWithRules` knows all of its rules at compile time, it is able to generate a special type to store the matches (in the example above, this type is called `FactMatch`). Normally, matches are stored in tables, which are significantly slower.
@@ -591,7 +594,7 @@ You must call `defineSessionWithRules` at the top-level of your module because i
 
 There are a few downsides:
 
-1. You will not be able to `add` new rules to the session afterwards, because it must know all of its rules at compile time.
+1. You will not be able to `add` other rules later, because it must know all of its rules at compile time.
 2. Compile times will slow down as more rules are added.
 
 You may think that an additional downside is that you now must define all your rules in one place, without the flexibility to separate them into different modules. This actually isn't true: you can define your rules separately and use a "wrapper" macro to put them into `defineSessionWithRules` at compile time. This is a bit advanced, but see [the test](tests/test3.nim) for an example of this.

@@ -899,10 +899,7 @@ macro defineSessionWithRules*(dataType: type, matchType: untyped, args: varargs[
     block:
       (initSession:
         proc (): Session[`dataType`, `matchType`] =
-          result = `session`
-          let rules = `tup`
-          for r in rules.fields:
-            result.add(r)
+          `session`
        ,
        rules: `tup`)
 
@@ -913,7 +910,10 @@ macro initSessionWithRules*(dataType: type, args: varargs[untyped]): untyped =
     matchSym = genSym(nskType, matchName)
   quote:
     let (initSession, rules) = defineSessionWithRules(`dataType`, `matchSym`, `args`)
-    (session: initSession(), rules: rules)
+    var session = initSession()
+    for r in rules.fields:
+      session.add(r)
+    (session: session, rules: rules)
 
 ## export so the engine doesn't need to be imported directly
 

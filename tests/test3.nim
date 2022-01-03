@@ -75,7 +75,9 @@ macro defineSessionWithRules(): untyped =
 let (initSession, rules) = defineSessionWithRules()
 
 test "can use wrapper macro to break up rules":
-  var session: Session[Fact, FactMatch] = initSession()
+  var session = initSession()
+  for r in rules.fields:
+    session.add(r)
   session.insert(Player, X, 0.0)
   session.insert(Player, Y, 1.0)
   session.insert(Global, WindowWidth, 100)
