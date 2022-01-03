@@ -897,14 +897,14 @@ macro defineSessionWithRules*(dataType: type, matchType: untyped, args: varargs[
     `setterProc`
     `checkerProc`
     block:
-      let rules = `tup`
       (initSession:
         proc (): Session[`dataType`, `matchType`] =
           result = `session`
+          let rules = `tup`
           for r in rules.fields:
             result.add(r)
        ,
-       rules: rules)
+       rules: `tup`)
 
 # a convenience macro that returns an instantiated session rather than an init proc
 macro initSessionWithRules*(dataType: type, args: varargs[untyped]): untyped =
