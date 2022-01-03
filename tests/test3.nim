@@ -61,20 +61,21 @@ proc moveRules(): NimNode =
 
 # define a wrapper macro that calls your functions
 
-macro initSessionWithRules(): untyped =
+macro defineSessionWithRules(): untyped =
   let
     getters = getterRules()
     movers = moveRules()
   quote:
-    initSessionWithRules(Fact):
+    defineSessionWithRules(Fact):
       `getters`
       `movers`
 
 # call the wrapper macro
 
-var (session, rules) = initSessionWithRules()
+let (initSession, rules) = defineSessionWithRules()
 
 test "can use wrapper macro to break up rules":
+  var session = initSession()
   session.insert(Player, X, 0.0)
   session.insert(Player, Y, 1.0)
   session.insert(Global, WindowWidth, 100)

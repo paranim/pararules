@@ -849,7 +849,7 @@ proc flattenRules(rules: NimNode): seq[NimNode] =
 
 const matchTypeSuffix = "Match"
 
-macro initSessionWithRules*(dataType: type, args: varargs[untyped]): untyped =
+macro defineSessionWithRules*(dataType: type, args: varargs[untyped]): untyped =
   var
     ruleNameToTupleType: OrderedTable[string, NimNode]
     ruleNameToEnumItem: OrderedTable[string, NimNode]
@@ -897,10 +897,19 @@ macro initSessionWithRules*(dataType: type, args: varargs[untyped]): untyped =
     `checkerProc`
     block:
       let rules = `tup`
-      var session = `session`
-      for r in rules.fields:
-        session.add(r)
-      (session: session, rules: rules)
+      (initSession:
+        proc (): Session[`dataType`, `matchSym`] =
+          result = `session`
+          for r in rules.fields:
+            result.add(r)
+       ,
+       rules: rules)
+
+# a convenience macro that returns an instantiated session rather than an init proc
+macro initSessionWithRules*(dataType: type, args: varargs[untyped]): untyped =
+  quote:
+    let (initSession, rules) = defineSessionWithRules(`dataType`, `args`)
+    (session: initSession(), rules: rules)
 
 ## export so the engine doesn't need to be imported directly
 
