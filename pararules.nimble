@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.21.0"
+version       = "0.23.0"
 author        = "oakes"
 description   = "A rules engine"
 license       = "Public Domain"
