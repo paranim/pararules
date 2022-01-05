@@ -560,13 +560,13 @@ session.insert(Global, TotalTime, game.totalTime)
 session.fireRules()
 ```
 
-### Using defineSessionWithRules
+### Using staticRuleset
 
 Additionally, a very significant performance gain can be had by defining the session and rules in a single command:
 
 ```nim
 let (initSession, rules) =
-  defineSessionWithRules(Fact, FactMatch, autoFire = false):
+  staticRuleset(Fact, FactMatch):
     rule getPlayer(Fact):
       what:
         (Player, X, x)
@@ -582,22 +582,22 @@ let (initSession, rules) =
         elif keys.contains(262): # right arrow
           session.insert(Player, X, x + 1.0)
 
-var session: Session[Fact, FactMatch] = initSession()
+var session: Session[Fact, FactMatch] = initSession(autoFire = false)
 
 for r in rules.fields:
   session.add(r)
 ```
 
-This is not merely a convenience; there is a very big internal difference. Since `defineSessionWithRules` knows all of its rules at compile time, it is able to generate a special type to store the matches (in the example above, this type is called `FactMatch`). Normally, matches are stored in tables, which are significantly slower.
+This is not a superficial syntax change; there is a very big internal difference. Since `staticRuleset` knows all of its rules at compile time, it is able to generate a special type to store the matches (in the example above, this type is called `FactMatch`). Normally, matches are stored in tables, which are significantly slower.
 
-You must call `defineSessionWithRules` at the top-level of your module because it's creating exported types. It returns a tuple containing your special `initSession` proc as well as the `rules` tuple (similar to what you'd get from `ruleset`).
+You must call `staticRuleset` at the top-level of your module because it's creating exported types. As arguments, it receives the base and match type and then the rules. It returns a tuple containing a special `initSession` proc as well as the `rules` tuple (similar to what you'd get from `ruleset`).
 
 There are a few downsides:
 
 1. You will not be able to `add` other rules later, because it must know all of its rules at compile time.
 2. Compile times will slow down as more rules are added.
 
-You may think that an additional downside is that you now must define all your rules in one place, without the flexibility to separate them into different modules. This actually isn't true: you can define your rules separately and use a "wrapper" macro to put them into `defineSessionWithRules` at compile time. This is a bit advanced, but see [the test](tests/test3.nim) for an example of this.
+You may think that an additional downside is that you now must define all your rules in one place, without the flexibility to separate them into different modules. This actually isn't true: you can define your rules separately and use a "wrapper" macro to put them into `staticRuleset` at compile time. This is a bit advanced, but see [the test](tests/test3.nim) for an example of this.
 
 ### Using ref types
 

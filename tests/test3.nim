@@ -61,21 +61,21 @@ proc moveRules(): NimNode =
 
 # define a wrapper macro that calls your functions
 
-macro defineSessionWithRules(): untyped =
+macro staticRuleset(): untyped =
   let
     getters = getterRules()
     movers = moveRules()
   quote:
-    defineSessionWithRules(Fact, FactMatch, autoFire = false):
+    staticRuleset(Fact, FactMatch):
       `getters`
       `movers`
 
 # call the wrapper macro
 
-let (initSession, rules) = defineSessionWithRules()
+let (initSession, rules) = staticRuleset()
 
 test "can use wrapper macro to break up rules":
-  var session = initSession()
+  var session = initSession(autoFire = false)
   for r in rules.fields:
     session.add(r)
   session.insert(Player, X, 0.0)
