@@ -1,4 +1,4 @@
-Pararules is the first RETE-based rules engine made for games. Rules engines have been around since the 70s, but for some reason, they haven't found their way into games yet. With pararules, you can store the entire state of your game and express the logic as a simple series of independent rules.
+Pararules is the first RETE-based rules engine made for games, having broad applicability to other kinds of programs as well. Rules engines have been around since the 70s, but for some reason, they haven't found their way into games yet. With pararules, you can store the entire state of your game and express the logic as a simple series of independent rules.
 
 On the surface, this bears a resemblence to ECSs (entity component systems), but a rules engine can be much more powerful. Rules are fundamentally *reactive* -- they fire when their data is updated, they can create derived facts that always remain up-to-date, and they can trigger other rules in turn.
 
@@ -562,7 +562,7 @@ session.fireRules()
 
 ### Using staticRuleset
 
-Additionally, a very significant performance gain can be had by defining the session and rules in a single command:
+Additionally, a very significant performance gain can be had by taking advantage of Nim's macro system to define your rules "statically":
 
 ```nim
 let (initSession, rules) =
@@ -588,7 +588,7 @@ for r in rules.fields:
   session.add(r)
 ```
 
-This is not a superficial syntax change; there is a very big internal difference. Since `staticRuleset` knows all of its rules at compile time, it is able to generate a special type to store the matches (in the example above, this type is called `FactMatch`). Normally, matches are stored in tables, which are significantly slower.
+This is not a superficial syntax change; there is a very big internal difference. Since `staticRuleset` knows all of your session's rules at compile time, it is able to generate a special type to store the matches (in the example above, this type is called `FactMatch`). Normally, matches are stored in tables, which are significantly slower.
 
 You must call `staticRuleset` at the top-level of your module because it's creating exported types. As arguments, it receives the base and match type and then the rules. It returns a tuple containing a special `initSession` proc as well as the `rules` tuple (similar to what you'd get from `ruleset`).
 
