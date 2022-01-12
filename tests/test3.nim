@@ -2,12 +2,12 @@ import unittest
 import pararules
 import macros
 
-# this module shows how you can use initSessionWithRules
+# this module shows how you can use staticRuleset
 # without having to define all your rules in one place.
 # instead, you make functions that return your rules
 # as quoted AST, and then create a "wrapper macro" that
 # calls them at compile time and passes their results
-# to initSessionWithRules. kinda hacky, but it works.
+# to staticRuleset. kinda hacky, but it works.
 
 type
   Id = enum
