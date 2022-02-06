@@ -2,7 +2,7 @@ Pararules is the first RETE-based rules engine made for games, having broad appl
 
 On the surface, this bears a resemblence to ECSs (entity component systems), but a rules engine can be much more powerful. Rules are fundamentally *reactive* -- they fire when their data is updated, they can create derived facts that always remain up-to-date, and they can trigger other rules in turn.
 
-You can see it in action in the [parakeet](https://github.com/paranim/parakeet) example game and the other [paranim examples](https://github.com/paranim/paranim_examples).
+You can see it in action in the [parakeet](https://github.com/paranim/parakeet) example game and the other [paranim examples](https://github.com/paranim/paranim_examples). Also watch [the FOSDEM 2022 talk](https://www.youtube.com/watch?v=uYFEJUEOHPI).
 
 ## Table of contents
 
