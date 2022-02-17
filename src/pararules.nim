@@ -851,54 +851,57 @@ proc createInitMatchProc(matchType: NimNode, ruleNameToEnumItem: OrderedTable[st
 const matchTypeSuffix = "Match"
 
 macro staticRuleset*(dataType: type, matchType: untyped, rules: untyped): untyped =
-  expectKind(matchType, {nnkIdent, nnkSym})
-  var
-    ruleNameToTupleType: OrderedTable[string, NimNode]
-    ruleNameToEnumItem: OrderedTable[string, NimNode]
-    ruleNameToVars: OrderedTable[string, seq[string]]
-  let
-    matchName = dataType.strVal & matchTypeSuffix
-    # flatten rules if there are multiple levels of statement lists
-    flatRules = newStmtList(flattenRules(rules))
-  for rule in flatRules:
+  when not defined(gcArc) and not defined(gcOrc):
+    raise newException(Exception, "As of Nim 1.6.4, staticRuleset does not work with the default GC; you must use gc:arc or gc:orc")
+  else:
+    expectKind(matchType, {nnkIdent, nnkSym})
+    var
+      ruleNameToTupleType: OrderedTable[string, NimNode]
+      ruleNameToEnumItem: OrderedTable[string, NimNode]
+      ruleNameToVars: OrderedTable[string, seq[string]]
     let
-      name = rule.getRuleName
-      enumItem = genSym(nskEnumField, matchName & name)
-      vars = getVarsFromRule(rule[2])
-    ruleNameToTupleType[name] = createTupleType(dataType, vars)
-    ruleNameToEnumItem[name] = enumItem
-    ruleNameToVars[name] = vars
-  let
-    enumName = matchName & enumSuffix
-    enumSym = genSym(nskType, enumName)
-    typeNode = createTypesForSession(matchType, enumSym, flatRules, ruleNameToTupleType, ruleNameToEnumItem)
-    getterProc = createGetterProc(dataType, matchType, ruleNameToVars, ruleNameToEnumItem)
-    setterProc = createSetterProc(dataType, matchType, ruleNameToVars, ruleNameToEnumItem)
-    checkerProc = createCheckerProc(dataType, matchType, ruleNameToVars, ruleNameToEnumItem)
-    initMatchProc = createInitMatchProc(matchType, ruleNameToEnumItem)
-  var tup = makeTupleOfRules(flatRules)
-  for expr in tup:
-    let rule = expr[1]
-    expectKind(rule, nnkCommand)
-    var call = rule[1]
-    expectKind(call, nnkCall)
-    call.add(matchType)
-  let sessionSym = bindSym("initSession")
-  var session = newNimNode(nnkCall).add(newNimNode(nnkBracketExpr).add(sessionSym, dataType, matchType))
-  session.add(newNimNode(nnkExprEqExpr).add(ident("autoFire"), ident("autoFire")))
-  session.add(newNimNode(nnkExprEqExpr).add(ident("initMatch"), initMatchProc))
-  let autoFire = ident("autoFire")
-  quote:
-    `typeNode`
-    `getterProc`
-    `setterProc`
-    `checkerProc`
-    block:
-      (initSession:
-        proc (`autoFire`: bool = true): Session[`dataType`, `matchType`] =
-          `session`
-       ,
-       rules: `tup`)
+      matchName = dataType.strVal & matchTypeSuffix
+      # flatten rules if there are multiple levels of statement lists
+      flatRules = newStmtList(flattenRules(rules))
+    for rule in flatRules:
+      let
+        name = rule.getRuleName
+        enumItem = genSym(nskEnumField, matchName & name)
+        vars = getVarsFromRule(rule[2])
+      ruleNameToTupleType[name] = createTupleType(dataType, vars)
+      ruleNameToEnumItem[name] = enumItem
+      ruleNameToVars[name] = vars
+    let
+      enumName = matchName & enumSuffix
+      enumSym = genSym(nskType, enumName)
+      typeNode = createTypesForSession(matchType, enumSym, flatRules, ruleNameToTupleType, ruleNameToEnumItem)
+      getterProc = createGetterProc(dataType, matchType, ruleNameToVars, ruleNameToEnumItem)
+      setterProc = createSetterProc(dataType, matchType, ruleNameToVars, ruleNameToEnumItem)
+      checkerProc = createCheckerProc(dataType, matchType, ruleNameToVars, ruleNameToEnumItem)
+      initMatchProc = createInitMatchProc(matchType, ruleNameToEnumItem)
+    var tup = makeTupleOfRules(flatRules)
+    for expr in tup:
+      let rule = expr[1]
+      expectKind(rule, nnkCommand)
+      var call = rule[1]
+      expectKind(call, nnkCall)
+      call.add(matchType)
+    let sessionSym = bindSym("initSession")
+    var session = newNimNode(nnkCall).add(newNimNode(nnkBracketExpr).add(sessionSym, dataType, matchType))
+    session.add(newNimNode(nnkExprEqExpr).add(ident("autoFire"), ident("autoFire")))
+    session.add(newNimNode(nnkExprEqExpr).add(ident("initMatch"), initMatchProc))
+    let autoFire = ident("autoFire")
+    quote:
+      `typeNode`
+      `getterProc`
+      `setterProc`
+      `checkerProc`
+      block:
+        (initSession:
+          proc (`autoFire`: bool = true): Session[`dataType`, `matchType`] =
+            `session`
+         ,
+         rules: `tup`)
 
 # a convenience macro that returns an instantiated session rather than an init proc
 # prefer staticRuleset instead
