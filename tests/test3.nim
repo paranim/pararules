@@ -9,6 +9,8 @@ import macros
 # calls them at compile time and passes their results
 # to staticRuleset. kinda hacky, but it works.
 
+from test1 import nil
+
 type
   Id = enum
     Global, Player,
@@ -17,6 +19,7 @@ type
     X, Y,
     WindowWidth, WindowHeight,
     Width, Height,
+    AllPeople,
 
 schema Fact(Id, Attr):
   DeltaTime: float
@@ -27,6 +30,7 @@ schema Fact(Id, Attr):
   WindowHeight: int
   Width: float
   Height: float
+  AllPeople: test1.People
 
 # define functions that return your rules as quoted code
 
@@ -40,6 +44,10 @@ proc getterRules(): NimNode =
       what:
         (id, X, x)
         (id, Y, y)
+    rule getGlobals(Fact):
+      what:
+        (Global, WindowWidth, windowWidth)
+        (Global, AllPeople, allPeople)
 
 proc moveRules(): NimNode =
   quote:
@@ -82,6 +90,8 @@ test "can use wrapper macro to break up rules":
   session.insert(Player, Y, 1.0)
   session.insert(Global, WindowWidth, 100)
   session.insert(Global, DeltaTime, 100.0)
+  session.insert(Global, AllPeople, @[(id: 1, color: "blue", leftOf: 2, height: 72)])
   session.fireRules
   check session.query(rules.getPlayer).x == 0.0
+  check session.query(rules.getGlobals).allPeople.len == 1
 

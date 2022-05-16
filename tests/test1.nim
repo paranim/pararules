@@ -3,7 +3,7 @@ import pararules
 import tables, sets
 
 type
-  People = seq[tuple[id: int, color: string, leftOf: int, height: int]]
+  People* = seq[tuple[id: int, color: string, leftOf: int, height: int]]
   Id* = enum
     Alice, Bob, Charlie, David, George,
     Seth, Thomas, Xavier, Yair, Zach,

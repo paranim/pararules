@@ -13,6 +13,25 @@ const
 
 ## rule, ruleset
 
+proc typeToSimpleName(node: NimNode): string =
+  case node.kind:
+  of nnkIdent:
+    node.strVal
+  of nnkDotExpr:
+    node[0].strVal & "." & node[1].strVal
+  else:
+    raise newException(Exception, "Can't get simple name for type: " & $node)
+
+proc simpleNameToType(name: string): NimNode =
+  let parts = strutils.split(name, ".")
+  case parts.len:
+  of 1:
+    ident(name)
+  of 2:
+    newDotExpr(ident(parts[0]), ident(parts[1]))
+  else:
+    raise newException(Exception, "Invalid ident: " & name)
+
 type
   VarInfo = tuple[condNum: int, typeNum: int]
 
@@ -64,7 +83,6 @@ proc destructureMatch(vars: seq[string], paramNode: NimNode): NimNode =
       quote do:
         `paramNode`.`varIdent`
     ))
-
 
 proc getVarsInNode(node: NimNode): HashSet[string] =
   if node.isVar:
@@ -127,7 +145,7 @@ proc parseWhat(name: string, dataType: NimNode, matchType: NimNode, attrs: Table
 
   let tupleType = newNimNode(nnkTupleTy)
   for (varName, varInfo) in vars.pairs:
-    tupleType.add(newIdentDefs(ident(varName), ident(types[varInfo.typeNum])))
+    tupleType.add(newIdentDefs(ident(varName), types[varInfo.typeNum].simpleNameToType))
 
   let
     prod = genSym(nskVar, "prod")
@@ -342,14 +360,24 @@ macro query*(session: Session, prod: Production, args: varargs[untyped]): untype
 
 ## schema
 
-proc simpleTypeName(node: NimNode): string =
-  case node.kind:
-  of nnkIdent:
-    node.strVal
-  of nnkDotExpr:
-    node[0].strVal & "." & node[1].strVal
-  else:
-    raise newException(Exception, "Can't get simple name for type: " & $node)
+proc checkTypes(types: seq[NimNode]): NimNode =
+  result = newStmtList()
+  var index = 0
+  for typ in types:
+    for index2 in 0 ..< types.len:
+      if index != index2:
+        let
+          typ2 = types[index2]
+          msg = typ.typeToSimpleName & " is the same type as " & typ2.typeToSimpleName &
+                  ", but they have different names. This is currently not allowed in the schema macro. " &
+                  "Please use only one of these names."
+        result.add(
+          quote do:
+            static:
+              when `typ` is `typ2`:
+                raise newException(Exception, `msg`)
+        )
+    index += 1
 
 proc createVariantBranch(enumItemName: NimNode, fieldName: NimNode, typ: NimNode): NimNode =
   result = newNimNode(nnkOfBranch)
@@ -367,25 +395,6 @@ proc createVariantEnum(name: NimNode, enumItems: seq[NimNode]): NimNode =
   for item in enumItems:
     choices.add(item)
   result.add(choices)
-
-proc checkTypes(types: seq[NimNode]): NimNode =
-  result = newStmtList()
-  var index = 0
-  for typ in types:
-    for index2 in 0 ..< types.len:
-      if index != index2:
-        let
-          typ2 = types[index2]
-          msg = typ.simpleTypeName & " is the same type as " & typ2.simpleTypeName &
-                  ", but they have different names. This is currently not allowed in the schema macro. " &
-                  "Please use only one of these names."
-        result.add(
-          quote do:
-            static:
-              when `typ` is `typ2`:
-                raise newException(Exception, `msg`)
-        )
-    index += 1
 
 proc createTypes(dataType: NimNode, enumName: NimNode, types: seq[NimNode]): NimNode =
   var enumItems: seq[NimNode]
@@ -479,7 +488,7 @@ proc createCheckProc(dataType: NimNode, types: seq[NimNode], attrs: Table[string
   for (typeName, typeNum) in attrs.pairs:
     var branch = newNimNode(nnkOfBranch)
     let correctTypeNum = typeNum.newLit
-    let correctTypeName = types[typeNum].simpleTypeName
+    let correctTypeName = types[typeNum].typeToSimpleName
     let branchBody =
       if typeNum == intTypeNum:
         let correctTypeNameAlt = types[idTypeNum].strVal
@@ -631,7 +640,7 @@ proc createConstants(dataType: NimNode, types: seq[NimNode], attrs: Table[string
   for (attr, typeNum) in attrs.pairs():
     attrToTypeTable.add(newNimNode(nnkExprColonExpr).add(attr.newLit).add(typeNum.newLit))
   for typ in types:
-    typeToNameArray.add(typ.simpleTypeName.newLit)
+    typeToNameArray.add(typ.typeToSimpleName.newLit)
   quote do:
     const `attrToTypeId`* = `attrToTypeTable`
     const `typeToNameId`* = `typeToNameArray`
