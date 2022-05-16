@@ -9,7 +9,7 @@ import macros
 # calls them at compile time and passes their results
 # to staticRuleset. kinda hacky, but it works.
 
-from test1 import nil
+from common import nil
 
 type
   Id = enum
@@ -30,7 +30,7 @@ schema Fact(Id, Attr):
   WindowHeight: int
   Width: float
   Height: float
-  AllPeople: test1.People
+  AllPeople: common.People
 
 # define functions that return your rules as quoted code
 
