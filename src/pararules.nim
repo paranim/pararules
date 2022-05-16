@@ -342,6 +342,15 @@ macro query*(session: Session, prod: Production, args: varargs[untyped]): untype
 
 ## schema
 
+proc simpleTypeName(node: NimNode): string =
+  case node.kind:
+  of nnkIdent:
+    node.strVal
+  of nnkDotExpr:
+    node[0].strVal & "." & node[1].strVal
+  else:
+    raise newException(Exception, "Can't get simple name for type: " & $node)
+
 proc createVariantBranch(enumItemName: NimNode, fieldName: NimNode, typ: NimNode): NimNode =
   result = newNimNode(nnkOfBranch)
   var list = newNimNode(nnkRecList)
@@ -358,6 +367,25 @@ proc createVariantEnum(name: NimNode, enumItems: seq[NimNode]): NimNode =
   for item in enumItems:
     choices.add(item)
   result.add(choices)
+
+proc checkTypes(types: seq[NimNode]): NimNode =
+  result = newStmtList()
+  var index = 0
+  for typ in types:
+    for index2 in 0 ..< types.len:
+      if index != index2:
+        let
+          typ2 = types[index2]
+          msg = typ.simpleTypeName & " is the same type as " & typ2.simpleTypeName &
+                  ", but they have different names. This is currently not allowed in the schema macro. " &
+                  "Please use only one of these names."
+        result.add(
+          quote do:
+            static:
+              when `typ` is `typ2`:
+                raise newException(Exception, `msg`)
+        )
+    index += 1
 
 proc createTypes(dataType: NimNode, enumName: NimNode, types: seq[NimNode]): NimNode =
   var enumItems: seq[NimNode]
@@ -451,7 +479,7 @@ proc createCheckProc(dataType: NimNode, types: seq[NimNode], attrs: Table[string
   for (typeName, typeNum) in attrs.pairs:
     var branch = newNimNode(nnkOfBranch)
     let correctTypeNum = typeNum.newLit
-    let correctTypeName = types[typeNum].strVal
+    let correctTypeName = types[typeNum].simpleTypeName
     let branchBody =
       if typeNum == intTypeNum:
         let correctTypeNameAlt = types[idTypeNum].strVal
@@ -603,7 +631,7 @@ proc createConstants(dataType: NimNode, types: seq[NimNode], attrs: Table[string
   for (attr, typeNum) in attrs.pairs():
     attrToTypeTable.add(newNimNode(nnkExprColonExpr).add(attr.newLit).add(typeNum.newLit))
   for typ in types:
-    typeToNameArray.add(typ.strVal.newLit)
+    typeToNameArray.add(typ.simpleTypeName.newLit)
   quote do:
     const `attrToTypeId`* = `attrToTypeTable`
     const `typeToNameId`* = `typeToNameArray`
@@ -633,7 +661,7 @@ macro schema*(sig: untyped, body: untyped): untyped =
     if not attr[0].isUpperAscii:
       raise newException(Exception, attr & " is an invalid attribute name because it must start with an uppercase letter")
     var typ = pair[1][0]
-    if typ.kind == nnkBracketExpr:
+    if typ.kind notin {nnkIdent, nnkDotExpr}:
       let message = """
 All types in the schema must be simple names.
 If you have a type that takes type parameters, such as `seq[string]`,
@@ -641,7 +669,6 @@ make a type alias such as `type Strings = seq[string]` and then
 use `Strings` in the schema.
       """
       raise newException(Exception, message)
-    expectKind(typ, nnkIdent)
     assert not (attr in attrs)
     if typ == idType:
       typ = intType
@@ -655,6 +682,7 @@ use `Strings` in the schema.
 
   let enumName = ident(dataType.strVal & enumSuffix)
   newStmtList(
+    checkTypes(types),
     createTypes(dataType, enumName, types),
     createEqProc(dataType, types),
     createInitProcs(dataType, enumName, types),
