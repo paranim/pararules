@@ -233,7 +233,12 @@ macro ruleWithAttrs*(sig: untyped, dataType: untyped, matchType: untyped, attrsN
       raise newException(Exception, "Unrecognized block name: " & blockName)
     t[blockName] = child[1]
 
-  let attrsImpl = attrsNode.getImpl
+  let attrsImpl =
+    # getImpl works differently for const nodes in nim 2.0
+    when (NimMajor, NimMinor) >= (1, 9):
+      attrsNode.getImpl[2]
+    else:
+      attrsNode.getImpl
   expectKind(attrsImpl, nnkBracket)
   var attrs: Table[string, int]
   for child in attrsImpl:
@@ -242,7 +247,12 @@ macro ruleWithAttrs*(sig: untyped, dataType: untyped, matchType: untyped, attrsN
     let val = child[1].intVal
     attrs[key] = cast[int](val)
 
-  let typesImpl = typesNode.getImpl
+  let typesImpl =
+    # getImpl works differently for const nodes in nim 2.0
+    when (NimMajor, NimMinor) >= (1, 9):
+      typesNode.getImpl[2]
+    else:
+      typesNode.getImpl
   expectKind(typesImpl, nnkBracket)
   var types: seq[string]
   for child in typesImpl:
