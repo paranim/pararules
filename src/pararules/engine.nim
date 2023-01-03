@@ -1,4 +1,4 @@
-import tables, algorithm, sets, sequtils
+import tables, algorithm, sets, sequtils, cows
 
 type
   # facts
@@ -52,7 +52,7 @@ type
     child: JoinNode[T, MatchT]
     leafNode: MemoryNode[T, MatchT]
     lastMatchId: int
-    matches: Table[IdAttrs, Match[MatchT]]
+    matches: CowTable[IdAttrs, Match[MatchT]]
     matchIds: Table[int, IdAttrs]
     condition: Condition[T]
     ruleName: string
@@ -165,7 +165,7 @@ proc add*[T, U, MatchT](session: Session[T, MatchT], production: Production[T, U
     # successors must be sorted by ancestry (descendents first) to avoid duplicate rule firings
     leafAlphaNode.successors.sort(proc (x, y: JoinNode[T, MatchT]): int =
       if isAncestor(x, y): 1 else: -1)
-    var memNode = MemoryNode[T, MatchT](parent: joinNode, nodeType: if i == last: Leaf else: Partial, condition: condition, ruleName: production.name, lastMatchId: -1)
+    var memNode = MemoryNode[T, MatchT](parent: joinNode, nodeType: if i == last: Leaf else: Partial, condition: condition, ruleName: production.name, lastMatchId: -1, matches: initCowTable[IdAttrs, Match[MatchT]]())
     if memNode.nodeType == Leaf:
       memNode.condFn = production.condFn
       if production.thenFn != nil:
@@ -398,7 +398,7 @@ proc fireRules*[T, MatchT](session: var Session[T, MatchT], recursionLimit: int 
     # if we pull the matches from inside the for loop below,
     # it'll produce non-deterministic results because `matches`
     # could be modified by the for loop itself. see test: "non-deterministic behavior"
-    var nodeToMatches: Table[ptr MemoryNode[T, MatchT], Table[IdAttrs, Match[MatchT]]]
+    var nodeToMatches: Table[ptr MemoryNode[T, MatchT], CowTable[IdAttrs, Match[MatchT]]]
     for (node, _) in thenQueue:
       if not nodeToMatches.hasKey(node):
         nodeToMatches[node] = node.matches
