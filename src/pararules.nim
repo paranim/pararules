@@ -1,4 +1,4 @@
-import pararules/[cows, engine], tables, sets, macros, strutils
+import pararules/engine, tables, sets, macros, strutils
 
 const
   initPrefix = "init"
@@ -981,4 +981,4 @@ export engine.Session, engine.fireRules, engine.add, engine.queryAll, engine.get
 
 # i need to do this so users don't need to `import sets` explicitly
 # see: https://github.com/nim-lang/Nim/issues/11167
-export sets.items, sets.len, cows
+export sets.items, sets.len
