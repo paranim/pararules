@@ -1,17 +1,20 @@
 import std/tables
 
 type
-  CowTablePayload[K, V] = ref object
+  CowTablePayload[K, V] = object
     counter: int
     data: Table[K, V]
 
   CowTable*[K, V] = object
-    p: CowTablePayload[K, V]
+    p: ptr CowTablePayload[K, V]
 
 proc `=destroy`*[K, V](x: var CowTable[K, V]) =
   if x.p != nil:
     if x.p.counter == 0:
-      `=destroy`(x.p)
+      when compileOption("threads"):
+        deallocShared(x.p)
+      else:
+        dealloc(x.p)
     else:
       x.p.counter.dec
 
@@ -21,16 +24,18 @@ proc `=copy`*[K, V](a: var CowTable[K, V], b: CowTable[K, V]) =
   a.p = b.p
 
 proc deepCopy*[K, V](y: CowTable[K, V]): CowTable[K, V] =
-  result.p = CowTablePayload[K, V](
-    counter: 0,
-    data: y.p.data
-  )
+  when compileOption("threads"):
+    result.p = cast[ptr CowTablePayload[K, V]](allocShared0(sizeof(CowTablePayload[K, V])))
+  else:
+    result.p = cast[ptr CowTablePayload[K, V]](alloc0(sizeof(CowTablePayload[K, V])))
+  result.p.data = y.p.data
 
 proc initCowTable*[K, V](): CowTable[K, V] =
-  result.p = CowTablePayload[K, V](
-    counter: 0,
-    data: initTable[K, V]()
-  )
+  when compileOption("threads"):
+    result.p = cast[ptr CowTablePayload[K, V]](allocShared0(sizeof(CowTablePayload[K, V])))
+  else:
+    result.p = cast[ptr CowTablePayload[K, V]](alloc0(sizeof(CowTablePayload[K, V])))
+  result.p.data = initTable[K, V]()
 
 proc hasKey*[K, V](t: CowTable[K, V], key: K): bool =
   t.p.data.hasKey(key)
